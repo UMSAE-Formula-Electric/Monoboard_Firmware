@@ -1,0 +1,34 @@
+# Out-of-source build directories (see CMakeLists.txt: in-source builds are
+# a hard error). Every configure preset writes under build/.
+build/
+cmake-build-*/
+
+# CMake / CTest byproducts that can appear if something is ever configured
+# in-source by mistake.
+CMakeFiles/
+CMakeCache.txt
+CTestTestfile.cmake
+cmake_install.cmake
+compile_commands.json
+Testing/
+.cmake/
+build.ninja
+/Makefile
+
+# Doxygen output (regenerate with `cmake --build <preset> --target docs`).
+docs/html/
+docs/doxygen_warnings.txt
+docs/fsae.tags
+
+# Firmware build outputs.
+*.elf
+*.hex
+*.bin
+*.map
+*.o
+*.su
+
+# Editor/IDE metadata.
+.idea/
+.vscode/
+.claude/
