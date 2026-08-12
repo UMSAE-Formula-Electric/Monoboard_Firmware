@@ -1,0 +1,50 @@
+# cppcheck ignore patterns for FSAE Electric Project
+# Generated code should not be checked as strictly as application code
+
+# CubeMX generated files - check with lower standards
+*/generated/*
+*/Src/stm32*_it.c
+*/Src/system_stm32*.c
+
+# HAL Driver library - supplied code
+*/STM32*_HAL_Driver/*
+*/CMSIS/*
+*/Device/*
+
+# FreeRTOS kernel - third-party code
+*/FreeRTOS/Source/*
+
+# Build artifacts
+/build/*
+/docs/*
+
+# IDE and system files
+.vscode/*
+.idea/*
+.DS_Store
+*.swp
+*.swo
+
+# Third-party libraries not under our control
+/lib/*
+
+# Suppress specific checks that are too noisy for embedded systems
+# These can also be suppressed per-function with // cppcheck-suppress comment
+
+# missingIncludeSystem - system includes are often not fully available in cross-compile
+missingIncludeSystem
+
+# unusedFunction - HAL callbacks might appear unused locally
+unusedFunction
+
+# unmatchedSuppression - suppress warnings about suppress comments themselves
+unmatchedSuppression
+
+# InvalidPointerCast - sometimes necessary in embedded/hardware access
+# invalidPointerCast
+
+# unusedVariable - embedded often has temporary vars for clarity
+# unusedVariable
+
+# NOTE: Application code (src/, inc/) WILL be checked with --enable=all
+# This ignore file only applies to external dependencies

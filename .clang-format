@@ -1,0 +1,113 @@
+---
+# FSAE Electric Project - clang-format Configuration
+# Based on LLVM style with Barr-C Embedded Coding Standard compliance
+
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+UseTab: Never
+TabWidth: 4
+IndentCaseLabels: true
+IndentGotoLabels: false
+IndentPPDirectives: AfterHash
+
+# Line length (Barr-C: 100 chars max)
+ColumnLimit: 100
+
+# Spacing and alignment
+SpaceAfterCStyleCast: true
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeBrackets: false
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpaceAroundPointerQualifiers: Before
+Cpp11BracedListStyle: true
+
+# Pointer alignment (Barr-C: pointer with type, not variable)
+PointerAlignment: Left
+DereferenceBindsToType: false
+
+# Function formatting
+AllowShortFunctionsOnASingleLine: None
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Brace styles
+BreakBeforeBraces: Allman
+AllowAllBracesOnNextLine: false
+
+# Function declaration style
+BreakBeforeFunctionDefinitionName: true
+
+# Operators
+BreakAfterJavaFieldAnnotations: false
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+
+# Comments
+AlignTrailingComments: true
+ReflowComments: true
+SpaceBeforeLineComment: 2
+
+# Includes (Barr-C: group and sort)
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^".*'
+    Priority: 1
+  - Regex: '^<.*'
+    Priority: 2
+
+# Function parameters
+BinPackParameters: false
+BinPackArguments: false
+AlignAfterOpenBracket: BlockIndent
+
+# Alignment
+AlignConsecutiveAssignments: false
+AlignConsecutiveBitFields: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+AlignEscapedNewlines: Left
+AlignOperands: Align
+AlignTrailingComments: true
+
+# Macros (Barr-C: UPPER_SNAKE_CASE)
+IndentPPDirectives: AfterHash
+
+# No spaces in brackets
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInConditionalStatement: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Line breaking
+PenaltyBreakAssignment: 100
+PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000
+PenaltyReturnTypeOnItsOwnLine: 60
+
+# Sorting and organization
+SortIncludes: true
+SortUsingDeclarations: false
+
+# Other
+FixNamespaceComments: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2
+PackConstructorInitializers: BinPack
+NamespaceIndentation: All
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+
+# C-specific
+Language: Cpp
+StandardSource: c11
