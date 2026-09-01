@@ -1,0 +1,51 @@
+name: Task
+description: A unit of work for the team — refactors, testing, documentation, chores
+title: "[Task]: "
+labels: ["task"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What needs to be done
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: |
+        Background a new member would need to pick this up: relevant files, datasheets,
+        prior issues or MRs, and anyone worth asking.
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Rough effort
+      options:
+        - Small — an afternoon
+        - Medium — a week of meetings
+        - Large — needs to be split up
+    validations:
+      required: true
+
+  - type: dropdown
+    id: newcomer
+    attributes:
+      label: Good first issue?
+      description: Is this a reasonable starting point for a new firmware member?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+      value: |
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
