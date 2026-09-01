@@ -77,7 +77,6 @@ layers above it.
 ```
 STM32_Programmer_CLI -c port=SWD -w build/mcu-debug/Monoboard.elf -v -rst
 ```
-Adjust `port=SWD` if you're using a different probe/interface.
 
 # Releases
 Releases are done such that after a successful integration tests a binary of both the debug and release versions will be
@@ -119,7 +118,6 @@ winget install DimitriVanHeesch.Doxygen
 winget install RubyInstallerTeam.RubyWithDevKit
 gem install ceedling
 ```
-(Skip `Kitware.CMake` if you already have it from STM32CubeCLT.)
 
 ## Debian / Ubuntu
 ```
