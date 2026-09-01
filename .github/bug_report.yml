@@ -1,0 +1,116 @@
+name: Bug Report
+description: Something on the Monoboard firmware is not behaving as expected
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please fill in as much as you can — a bug we can
+        reproduce on the bench gets fixed a lot faster than one we can't.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong, in one or two sentences.
+      placeholder: CAN TX stalls after ~30 s of running with the inverter connected.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Affected subsystem
+      description: Where does the problem live? Pick the closest match.
+      multiple: true
+      options:
+        - CAN / communications
+        - ADC / analog sensing
+        - GPIO / digital IO
+        - FreeRTOS tasks or scheduling
+        - Shutdown circuit / safety interlocks
+        - Pedal / APPS / BSE handling
+        - Bootloader / flashing
+        - CubeMX / HAL configuration (.ioc)
+        - Build system / toolchain
+        - Documentation
+        - Unknown / other
+    validations:
+      required: true
+
+  - type: input
+    id: firmware-version
+    attributes:
+      label: Firmware version
+      description: Commit SHA, tag, or branch the bug was seen on.
+      placeholder: "main @ a1b2c3d"
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: Board revision and anything else it was wired to.
+      placeholder: "Monoboard rev C, bench supply at 12 V, inverter emulator on CAN1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Safety-relevant — affects shutdown circuit, tractive system, or rules compliance
+        - Blocking — car or test bench is unusable until this is fixed
+        - Major — a subsystem is broken but there is a workaround
+        - Minor — cosmetic, logging, or nice-to-have
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include build flags, jumper settings, and CAN traffic if relevant.
+      value: |
+        1. Flash `...` onto the board
+        2. Power up with ...
+        3. Send ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, CAN traces, scope captures
+      description: |
+        Paste debug UART output, a candump/PCAN trace, fault-handler register dumps,
+        or attach scope screenshots. Code blocks are formatted automatically.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues and this is not a duplicate
+          required: true
+        - label: I reproduced this on the latest `main` (or explained above why I couldn't)
+          required: false

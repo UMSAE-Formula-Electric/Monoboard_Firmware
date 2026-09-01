@@ -1,0 +1,92 @@
+name: Feature
+description: Propose new firmware functionality or a change to existing behaviour
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What can't we do today? Why does the car need this?
+      placeholder: We have no way to log pedal position during endurance runs, so we can't diagnose derating after the fact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should the firmware do? Sketch the approach if you have one.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Affected subsystem
+      multiple: true
+      options:
+        - CAN / communications
+        - ADC / analog sensing
+        - GPIO / digital IO
+        - FreeRTOS tasks or scheduling
+        - Shutdown circuit / safety interlocks
+        - Pedal / APPS / BSE handling
+        - Bootloader / flashing
+        - CubeMX / HAL configuration (.ioc)
+        - Build system / toolchain
+        - Documentation
+        - New module
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dependencies
+    attributes:
+      label: Does this depend on anything outside the firmware?
+      multiple: true
+      options:
+        - New or changed hardware / board spin
+        - CAN database (DBC) change
+        - Another ECU (VCU, ACU, dash, etc.)
+        - Wiring harness change
+        - Nothing — firmware only
+    validations:
+      required: true
+
+  - type: textarea
+    id: rules
+    attributes:
+      label: Rules implications
+      description: |
+        If this touches anything the FSAE/FE rules govern — shutdown circuit, APPS/BSE
+        plausibility, AMS, IMD, RTD sequencing, tractive system indicators — cite the
+        relevant rule numbers here. Write "None" if it doesn't apply.
+      placeholder: "None"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How will we know this is done and working?
+      value: |
+        - [ ] 
+        - [ ] 
+        - [ ] Verified on the bench
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you weighed, and why you'd skip them.
+
+  - type: input
+    id: deadline
+    attributes:
+      label: Needed by
+      description: Testing day, design review, or competition deadline this is tied to.
+      placeholder: "Before the first shakedown in March"

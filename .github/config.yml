@@ -1,0 +1,7 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Firmware channel on Discord
+    about: Questions, design discussion, and anything not yet a concrete bug or task.
+  - name: Team documentation
+    url: https://github.com/UMSAE-Formula-Electric
+    about: Setup guides, board pinouts, and CAN documentation live here first.
