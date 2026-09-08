@@ -1,4 +1,7 @@
-/* Implementation of the harness declared in test_framework.h. */
+/**
+ * @file test_framework.c
+ * @brief Implementation of the harness declared in test_framework.h.
+ */
 #include "test_framework.h"
 
 #include <stdbool.h>
@@ -11,15 +14,13 @@
 #define TEST_MAX_CASES    128U
 #define TEST_MAX_FAILURES 32U
 
-typedef struct
-{
+typedef struct {
     const char *suite;
     const char *name;
     TestFn      fn;
 } TestCase;
 
-typedef struct
-{
+typedef struct {
     const char *file;
     int         line;
     const char *expr;
@@ -34,8 +35,7 @@ static size_t      g_failure_count;
 
 void test_register(const char *suite, const char *name, TestFn fn)
 {
-    if (g_case_count >= TEST_MAX_CASES)
-    {
+    if (g_case_count >= TEST_MAX_CASES) {
         fprintf(stderr, "test_framework: TEST_MAX_CASES exceeded, raise it\n");
         abort();
     }
@@ -48,8 +48,7 @@ void test_register(const char *suite, const char *name, TestFn fn)
 
 void test_fail_check(const char *file, int line, const char *expr)
 {
-    if (g_failure_count < TEST_MAX_FAILURES)
-    {
+    if (g_failure_count < TEST_MAX_FAILURES) {
         g_failures[g_failure_count].file = file;
         g_failures[g_failure_count].line = line;
         g_failures[g_failure_count].expr = expr;
@@ -82,12 +81,10 @@ int test_run_all(const char *suite_filter)
     size_t failed = 0U;
     size_t ran    = 0U;
 
-    for (i = 0U; i < g_case_count; i++)
-    {
+    for (i = 0U; i < g_case_count; i++) {
         const TestCase *test_case = &g_cases[i];
 
-        if ((suite_filter != NULL) && (strcmp(suite_filter, test_case->suite) != 0))
-        {
+        if ((suite_filter != NULL) && (strcmp(suite_filter, test_case->suite) != 0)) {
             continue;
         }
 
@@ -95,30 +92,24 @@ int test_run_all(const char *suite_filter)
         test_case->fn();
         ran++;
 
-        if (g_failure_count == 0U)
-        {
+        if (g_failure_count == 0U) {
             printf("%s %s / %s\n", tag_pass(), test_case->suite, test_case->name);
             passed++;
-        }
-        else
-        {
+        } else {
             printf("%s %s / %s\n", tag_fail(), test_case->suite, test_case->name);
             failed++;
 
-            for (j = 0U; (j < g_failure_count) && (j < TEST_MAX_FAILURES); j++)
-            {
+            for (j = 0U; (j < g_failure_count) && (j < TEST_MAX_FAILURES); j++) {
                 printf("       %s:%d: %s\n", g_failures[j].file, g_failures[j].line,
                        g_failures[j].expr);
             }
-            if (g_failure_count > TEST_MAX_FAILURES)
-            {
+            if (g_failure_count > TEST_MAX_FAILURES) {
                 printf("       ... and %zu more\n", g_failure_count - TEST_MAX_FAILURES);
             }
         }
     }
 
-    if (ran == 0U)
-    {
+    if (ran == 0U) {
         fprintf(stderr, "no tests matched \"%s\"\n", (suite_filter != NULL) ? suite_filter : "");
         return 1;
     }

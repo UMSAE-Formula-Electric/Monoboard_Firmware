@@ -206,6 +206,7 @@ target_link_libraries(services
 #    saw first" at worst -- i.e. shipping the fake CAN driver to a board.
 add_library(drivers_fake STATIC
         ${PROD}/drivers/can_fake.c
+        ${PROD}/drivers/gpio_fake.c
 )
 target_include_directories(drivers_fake PUBLIC ${PROD}/drivers)
 target_link_libraries(drivers_fake
@@ -217,6 +218,7 @@ target_link_libraries(drivers_fake
 if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/can_stm32.c
+            ${PROD}/drivers/gpio_stm32.c
     )
     target_include_directories(drivers_stm32 PUBLIC ${PROD}/drivers)
     target_link_libraries(drivers_stm32
@@ -317,3 +319,21 @@ add_custom_target(docs
         COMMAND doxygen Doxyfile
         WORKING_DIRECTORY ${SRC_ROOT}
         COMMENT "Generating Doxygen documentation")
+
+# Guards the STM32CubeMX .ioc (and its generated main.h) against drift from the
+# STM32 pin layer -- gpio_if.h's GpioPin catalogue, gpio_stm32.c's pin_map[],
+# first-party GpioConfig call sites, and can_stm32.c's CAN pads. This is the
+# STM32 driver's check (it validates *_stm32.c, which only build for MCU), so
+# it is only offered for MCU configs; a non-STM32 driver would bring its own.
+# Standalone like the analysis targets above -- run it in CI.
+if(PLATFORM_MCU)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_custom_target(ioc-check
+                COMMAND ${Python3_EXECUTABLE} ${SRC_ROOT}/tools/ioc_check.py --root ${SRC_ROOT}
+                WORKING_DIRECTORY ${SRC_ROOT}
+                COMMENT "Checking CubeMX .ioc vs. the STM32 pin layer")
+    else()
+        message(STATUS "Python3 not found -- 'ioc-check' target unavailable")
+    endif()
+endif()

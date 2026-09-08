@@ -16,19 +16,19 @@ IndentPPDirectives: AfterHash
 ColumnLimit: 100
 
 # Spacing and alignment
-SpaceAfterCStyleCast: true
+SpaceAfterCStyleCast: false
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeRangeBasedForLoopColon: true
-SpaceBeforeBrackets: false
+SpaceBeforeSquareBrackets: false
 SpaceInEmptyBlock: false
 SpaceInEmptyParentheses: false
-SpaceAroundPointerQualifiers: Before
+SpaceAroundPointerQualifiers: Default
 Cpp11BracedListStyle: true
 
-# Pointer alignment (Barr-C: pointer with type, not variable)
-PointerAlignment: Left
-DereferenceBindsToType: false
+# Pointer alignment (declarator-attached: `CanFrame *frame`)
+PointerAlignment: Right
+DerivePointerAlignment: false
 
 # Function formatting
 AllowShortFunctionsOnASingleLine: None
@@ -36,12 +36,26 @@ AllowShortCaseLabelsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 
-# Brace styles
-BreakBeforeBraces: Allman
-AllowAllBracesOnNextLine: false
-
-# Function declaration style
-BreakBeforeFunctionDefinitionName: true
+# Brace styles: Allman for function bodies only; K&R everywhere else
+# (structs, enums, control statements, initializer lists).
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterClass: false
+  AfterExternBlock: false
+  AfterCaseLabel: false
+  AfterNamespace: false
+  BeforeElse: false
+  BeforeWhile: false
+  BeforeCatch: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: false
+  IndentBraces: false
+IndentExternBlock: NoIndent
 
 # Operators
 BreakAfterJavaFieldAnnotations: false
@@ -51,32 +65,26 @@ BreakBeforeTernaryOperators: true
 # Comments
 AlignTrailingComments: true
 ReflowComments: true
-SpaceBeforeLineComment: 2
+SpacesBeforeTrailingComments: 2
 
-# Includes (Barr-C: group and sort)
-IncludeBlocks: Regroup
-IncludeCategories:
-  - Regex: '^".*'
-    Priority: 1
-  - Regex: '^<.*'
-    Priority: 2
+# Includes: keep the author's blank-line-separated groups, sort within each.
+IncludeBlocks: Preserve
 
-# Function parameters
+# Function parameters: wrapped continuations align under the first
+# argument; arguments may share a line (as in the HAL init calls).
 BinPackParameters: false
-BinPackArguments: false
-AlignAfterOpenBracket: BlockIndent
+BinPackArguments: true
+AlignAfterOpenBracket: Align
 
-# Alignment
-AlignConsecutiveAssignments: false
-AlignConsecutiveBitFields: false
-AlignConsecutiveDeclarations: false
-AlignConsecutiveMacros: false
+# Alignment: line up runs of declarations, assignments, struct-field
+# initializers and trailing comments -- the house style in the driver
+# and interface files (e.g. the `.init = / .send =` vtables).
+AlignConsecutiveAssignments: true
+AlignConsecutiveBitFields: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
 AlignEscapedNewlines: Left
 AlignOperands: Align
-AlignTrailingComments: true
-
-# Macros (Barr-C: UPPER_SNAKE_CASE)
-IndentPPDirectives: AfterHash
 
 # No spaces in brackets
 SpacesInAngles: false
@@ -110,4 +118,3 @@ ConstructorInitializerIndentWidth: 4
 
 # C-specific
 Language: Cpp
-StandardSource: c11

@@ -1,4 +1,6 @@
-/* Programmable fake CAN driver: implements CanIf with no hardware and
+/**
+ * @file can_fake.h
+ * @brief Programmable fake CAN driver: implements CanIf with no hardware and
  * no FreeRTOS dependency, so it builds and runs anywhere. Composition
  * roots wire `can_fake` in exactly where `can_stm32` would go; tests
  * additionally use the functions below to act as "the bus".

@@ -1,3 +1,7 @@
+/**
+ * @file can_fake.c
+ * @brief Programmable fake CAN driver -- the CanIf test double.
+ */
 #include "can_fake.h"
 
 static CanFrame rx_queue[CAN_FAKE_QUEUE_DEPTH];
@@ -29,7 +33,7 @@ static CanStatus fake_send(const CanFrame *frame)
         return CAN_ERR_FULL;
     }
     tx_queue[tx_head] = *frame;
-    tx_head = (tx_head + 1U) % CAN_FAKE_QUEUE_DEPTH;
+    tx_head           = (tx_head + 1U) % CAN_FAKE_QUEUE_DEPTH;
     tx_count++;
     return CAN_OK;
 }
@@ -42,7 +46,7 @@ static CanStatus fake_receive(CanFrame *frame, uint32_t timeout_ms)
     if (!initialized || rx_count == 0U) {
         return CAN_ERR_TIMEOUT;
     }
-    *frame = rx_queue[rx_tail];
+    *frame  = rx_queue[rx_tail];
     rx_tail = (rx_tail + 1U) % CAN_FAKE_QUEUE_DEPTH;
     rx_count--;
     return CAN_OK;
@@ -56,12 +60,12 @@ const CanIf can_fake = {
 
 void can_fake_reset(void)
 {
-    rx_head = 0U;
-    rx_tail = 0U;
-    rx_count = 0U;
-    tx_head = 0U;
-    tx_tail = 0U;
-    tx_count = 0U;
+    rx_head     = 0U;
+    rx_tail     = 0U;
+    rx_count    = 0U;
+    tx_head     = 0U;
+    tx_tail     = 0U;
+    tx_count    = 0U;
     initialized = false;
 }
 
@@ -71,7 +75,7 @@ void can_fake_inject_rx(const CanFrame *frame)
         return; /* test injected more than the fake can hold; drop */
     }
     rx_queue[rx_head] = *frame;
-    rx_head = (rx_head + 1U) % CAN_FAKE_QUEUE_DEPTH;
+    rx_head           = (rx_head + 1U) % CAN_FAKE_QUEUE_DEPTH;
     rx_count++;
 }
 
@@ -80,7 +84,7 @@ bool can_fake_pop_tx(CanFrame *frame)
     if (tx_count == 0U) {
         return false;
     }
-    *frame = tx_queue[tx_tail];
+    *frame  = tx_queue[tx_tail];
     tx_tail = (tx_tail + 1U) % CAN_FAKE_QUEUE_DEPTH;
     tx_count--;
     return true;

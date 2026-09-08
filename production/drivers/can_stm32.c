@@ -1,4 +1,6 @@
-/* CanIf implementation for ST HAL's CAN1 (bxCAN peripheral).
+/**
+ * @file can_stm32.c
+ * @brief CanIf implementation for ST HAL's CAN1 (bxCAN peripheral).
  *
  * Wiring: CAN1_RX -> PA11, CAN1_TX -> PA12, AF9 (this board's schematic;
  * change here, and only here, if it moves). Bit timing is derived from
@@ -77,8 +79,8 @@ void CAN1_RX0_IRQHandler(void)
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     CAN_RxHeaderTypeDef rx_header;
-    CanFrame             frame = {0};
-    BaseType_t            higher_priority_task_woken = pdFALSE;
+    CanFrame            frame                      = {0};
+    BaseType_t          higher_priority_task_woken = pdFALSE;
 
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &rx_header, frame.data) != HAL_OK) {
         return;
@@ -86,8 +88,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
     frame.extended_id = (rx_header.IDE == CAN_ID_EXT);
     frame.id          = frame.extended_id ? rx_header.ExtId : rx_header.StdId;
-    frame.rtr          = (rx_header.RTR == CAN_RTR_REMOTE);
-    frame.dlc          = (uint8_t)rx_header.DLC;
+    frame.rtr         = (rx_header.RTR == CAN_RTR_REMOTE);
+    frame.dlc         = (uint8_t)rx_header.DLC;
 
     (void)xQueueSendFromISR(rx_queue_handle, &frame, &higher_priority_task_woken);
     portYIELD_FROM_ISR(higher_priority_task_woken);
@@ -96,8 +98,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 static CanStatus stm32_init(const CanConfig *config)
 {
     CAN_FilterTypeDef filter = {0};
-    uint32_t           pclk1_hz;
-    uint32_t           prescaler;
+    uint32_t          pclk1_hz;
+    uint32_t          prescaler;
 
     if (config == NULL || config->bitrate_bps == 0U) {
         return CAN_ERR_HAL;
@@ -109,13 +111,13 @@ static CanStatus stm32_init(const CanConfig *config)
         return CAN_ERR_HAL; /* bitrate not achievable from this clock */
     }
 
-    hcan1.Instance = CAN1;
-    hcan1.Init.Prescaler          = prescaler;
-    hcan1.Init.Mode                = config->loopback ? CAN_MODE_LOOPBACK : CAN_MODE_NORMAL;
-    hcan1.Init.SyncJumpWidth      = CAN_SJW_1TQ;
-    hcan1.Init.TimeSeg1            = CAN_BS1_13TQ;
-    hcan1.Init.TimeSeg2            = CAN_BS2_2TQ; /* 1 + 13 + 2 = 16 TQ, 87.5% sample point */
-    hcan1.Init.TimeTriggeredMode   = DISABLE;
+    hcan1.Instance                  = CAN1;
+    hcan1.Init.Prescaler            = prescaler;
+    hcan1.Init.Mode                 = config->loopback ? CAN_MODE_LOOPBACK : CAN_MODE_NORMAL;
+    hcan1.Init.SyncJumpWidth        = CAN_SJW_1TQ;
+    hcan1.Init.TimeSeg1             = CAN_BS1_13TQ;
+    hcan1.Init.TimeSeg2             = CAN_BS2_2TQ; /* 1 + 13 + 2 = 16 TQ, 87.5% sample point */
+    hcan1.Init.TimeTriggeredMode    = DISABLE;
     hcan1.Init.AutoBusOff           = ENABLE;
     hcan1.Init.AutoWakeUp           = DISABLE;
     hcan1.Init.AutoRetransmission   = ENABLE;
@@ -145,7 +147,7 @@ static CanStatus stm32_init(const CanConfig *config)
     }
 
     rx_queue_handle = xQueueCreateStatic(CAN_STM32_RX_QUEUE_DEPTH, sizeof(CanFrame),
-                                          rx_queue_storage, &rx_queue_struct);
+                                         rx_queue_storage, &rx_queue_struct);
     if (rx_queue_handle == NULL) {
         return CAN_ERR_HAL;
     }
@@ -164,7 +166,7 @@ static CanStatus stm32_init(const CanConfig *config)
 static CanStatus stm32_send(const CanFrame *frame)
 {
     CAN_TxHeaderTypeDef tx_header = {0};
-    uint32_t              tx_mailbox;
+    uint32_t            tx_mailbox;
 
     if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0U) {
         return CAN_ERR_FULL;
