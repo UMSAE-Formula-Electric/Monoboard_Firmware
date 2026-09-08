@@ -87,10 +87,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install ARM toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
-          arm-none-eabi-gcc --version
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: '13.3.Rel1'
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
