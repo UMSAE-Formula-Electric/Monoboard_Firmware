@@ -120,4 +120,3 @@ ALIASES               += \
     "note=\xrefitem notes \"Note\" \"Notes\"" \
     "warning=\xrefitem warnings \"Warning\" \"Warnings\"" \
     "bug=\xrefitem bugs \"Bug\" \"Bugs\"" \
-    "todo=\xrefitem todos \"Todo\" \"Todo Items\""
