@@ -1,0 +1,183 @@
+# Monoboard firmware CI.
+#
+# Jobs (all independent, run in parallel):
+#   format          - clang-format --dry-run over the first-party sources
+#   host-test       - desktop preset: build + ctest, ASan/UBSan on
+#   static-analysis - cppcheck over the first-party translation units
+#   mcu             - ioc-check, then cross-build mcu-debug + mcu-release, size report
+#   docs            - Doxygen (warnings are errors), html uploaded as an artifact
+#   pages           - publishes the Doxygen site (main only; needs Pages = "GitHub Actions")
+#
+# FreeRTOS-Kernel is vendored in-tree (not a submodule), so a plain checkout is enough.
+# Runner is pinned to ubuntu-24.04 for tool-version stability -- the .clang-format
+# requires clang-format >= 16 and 24.04 ships 18.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format
+          clang-format --version
+      - name: Configure
+        run: cmake --preset desktop
+      - name: Check formatting
+        run: cmake --build build/desktop --target format-check
+
+  host-test:
+    name: host build + unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: host-test
+      - name: Configure
+        run: cmake --preset desktop -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      - name: Build
+        run: cmake --build build/desktop -j "$(nproc)"
+      - name: Test (ASan/UBSan)
+        run: ctest --preset desktop --output-junit "$PWD/build/desktop/ctest-junit.xml"
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-results
+          path: build/desktop/ctest-junit.xml
+          if-no-files-found: warn
+
+  static-analysis:
+    name: cppcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cppcheck
+          cppcheck --version
+      - name: Configure
+        run: cmake --preset desktop            # generates compile_commands.json
+      - name: Run cppcheck
+        run: cmake --build build/desktop --target cppcheck
+
+  mcu:
+    name: MCU firmware + ioc-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
+          arm-none-eabi-gcc --version
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: mcu
+      - name: Configure (mcu-debug)
+        run: cmake --preset mcu-debug -DCMAKE_C_COMPILER_LAUNCHER=ccache
+      - name: .ioc / pin-layer drift check
+        run: cmake --build build/mcu-debug --target ioc-check
+      - name: Build mcu-debug
+        run: cmake --build build/mcu-debug -j "$(nproc)"
+      - name: Configure + build mcu-release (LTO)
+        run: |
+          cmake --preset mcu-release -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          cmake --build build/mcu-release -j "$(nproc)"
+      - name: Size report
+        run: |
+          {
+            echo '### Firmware size'
+            echo '```'
+            arm-none-eabi-size build/mcu-debug/Monoboard.elf build/mcu-release/Monoboard.elf
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            build/mcu-debug/Monoboard.elf
+            build/mcu-debug/Monoboard.hex
+            build/mcu-debug/Monoboard.bin
+            build/mcu-debug/Monoboard.map
+            build/mcu-release/Monoboard.elf
+            build/mcu-release/Monoboard.hex
+            build/mcu-release/Monoboard.bin
+            build/mcu-release/Monoboard.map
+
+  docs:
+    name: Doxygen
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen graphviz
+          doxygen --version
+      - name: Generate
+        run: doxygen Doxyfile
+      - name: Treat Doxygen warnings as errors
+        run: |
+          if [ -s docs/doxygen_warnings.txt ]; then
+            echo "::error::Doxygen emitted warnings"
+            cat docs/doxygen_warnings.txt
+            exit 1
+          fi
+      - name: Upload site
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs/html
+
+  # Publishes the Doxygen site to GitHub Pages on pushes to main.
+  # Requires: repo Settings -> Pages -> Build and deployment -> Source = "GitHub Actions".
+  # Delete this job if the team does not want a published site.
+  pages:
+    name: Publish docs
+    needs: docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen graphviz
+      - name: Generate
+        run: doxygen Doxyfile
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/html
+      - id: deploy
+        uses: actions/deploy-pages@v4

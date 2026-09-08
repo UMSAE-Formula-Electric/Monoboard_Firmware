@@ -10,14 +10,14 @@
  * CubeMX's MX_GPIO_Init is not on the call path.
  *
  * The .ioc still owns pad *identity*: pin_map[] below is written in terms of
- * the <LABEL>_Pin / <LABEL>_GPIO_Port macros CubeMX generates into main.h
- * from vendor.ioc, so renaming or deleting a pin in the .ioc (and
- * regenerating) is a compile error here, not silent drift. tools/ioc_check.py
- * checks the rest.
+ * the per-pin macros CubeMX generates into main.h from vendor.ioc (for a User
+ * Label "FOO", @c FOO_Pin and @c FOO_GPIO_Port), so renaming or deleting a pin
+ * in the .ioc (and regenerating) is a compile error here, not silent drift.
+ * tools/ioc_check.py checks the rest.
  */
 #include "gpio_stm32.h"
 
-#include "main.h" /* CubeMX-generated pin-label macros (<LABEL>_Pin, ...) */
+#include "main.h" /* CubeMX-generated per-pin macros: FOO_Pin, FOO_GPIO_Port */
 #include "stm32f4xx_hal.h"
 
 typedef struct {
@@ -26,8 +26,8 @@ typedef struct {
 } PinMap;
 
 /* GpioPin -> silicon pad. Adding a pin: give the pad a User Label in CubeMX
- * matching the enumerator (GPIO_PIN_<LABEL> <-> label "<LABEL>"), regenerate,
- * add the row here, and bump the _Static_assert. */
+ * equal to the enumerator minus its GPIO_PIN_ prefix (GPIO_PIN_FOO -> "FOO"),
+ * regenerate, add the row here, and bump the _Static_assert. */
 static const PinMap pin_map[GPIO_PIN_COUNT] = {
     [GPIO_PIN_TEST] = {TEST_GPIO_Port, TEST_Pin},
 };
