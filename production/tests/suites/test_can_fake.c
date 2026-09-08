@@ -1,4 +1,6 @@
-/* Exercises the CanIf contract (production/interfaces/can_if.h) through
+/**
+ * @file test_can_fake.c
+ * @brief Exercises the CanIf contract (production/interfaces/can_if.h) through
  * can_fake, the dependency-free double for can_stm32 (ARCHITECTURE.md:
  * every driver has a programmable fake sibling so both stay warm).
  */
@@ -16,9 +18,8 @@ static CanFrame make_frame(uint32_t id, uint8_t dlc)
 
     frame.id  = id;
     frame.dlc = dlc;
-    for (i = 0; i < dlc; i++)
-    {
-        frame.data[i] = (uint8_t) (id + i);
+    for (i = 0; i < dlc; i++) {
+        frame.data[i] = (uint8_t)(id + i);
     }
     return frame;
 }
@@ -27,15 +28,12 @@ static bool frames_equal(const CanFrame *a, const CanFrame *b)
 {
     uint8_t i;
 
-    if ((a->id != b->id) || (a->extended_id != b->extended_id) || (a->rtr != b->rtr) ||
-        (a->dlc != b->dlc))
-    {
+    if ((a->id != b->id) || (a->extended_id != b->extended_id) || (a->rtr != b->rtr)
+        || (a->dlc != b->dlc)) {
         return false;
     }
-    for (i = 0; i < a->dlc; i++)
-    {
-        if (a->data[i] != b->data[i])
-        {
+    for (i = 0; i < a->dlc; i++) {
+        if (a->data[i] != b->data[i]) {
             return false;
         }
     }
@@ -77,8 +75,7 @@ TEST(can_fake, send_fails_when_tx_queue_full)
     can_fake_reset();
     CHECK(can_fake.init(&config) == CAN_OK);
 
-    for (i = 0; i < CAN_FAKE_QUEUE_DEPTH; i++)
-    {
+    for (i = 0; i < CAN_FAKE_QUEUE_DEPTH; i++) {
         CHECK(can_fake.send(&frame) == CAN_OK);
     }
     CHECK(can_fake.send(&frame) == CAN_ERR_FULL);
