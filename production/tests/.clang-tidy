@@ -1,0 +1,8 @@
+---
+# The desktop test harness and suites are single-threaded host code. The
+# concurrency-* checks target the FreeRTOS firmware (ISR/task data sharing) and
+# only produce noise here -- e.g. getenv()/isatty() in the colour-tag helper,
+# which run once from main() before any thread exists.
+InheritParentConfig: true
+Checks: >
+  -concurrency-*

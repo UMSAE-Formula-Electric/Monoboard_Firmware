@@ -324,6 +324,30 @@ add_custom_target(cppcheck
         --error-exitcode=1
         COMMENT "cppcheck (first-party TUs via compile_commands.json)")
 
+# clang-tidy over the first-party translation units (Clang Static Analyzer +
+# the bugprone / cert families). .clang-tidy holds the check list and turns any
+# finding into a failure; production/tests/.clang-tidy relaxes concurrency-*
+# there. Each listed .c is a real TU in this build's compile_commands.json.
+#
+# Host configs only: the memory-mapped register access in the *_stm32.c drivers
+# trips performance-no-int-to-ptr / clang-analyzer fixed-address checks on every
+# HAL macro -- noise, not bugs. Those drivers are gated by
+# -Wall -Wextra -Werror -Wconversion in the MCU build instead.
+if(NOT PLATFORM_MCU)
+    set(TIDY_SOURCES ${FIRST_PARTY_SOURCES})
+    list(FILTER TIDY_SOURCES INCLUDE REGEX "\\.c$")
+    list(FILTER TIDY_SOURCES EXCLUDE REGEX "_stm32\\.c$")  # MCU-only, not built here
+    find_program(CLANG_TIDY NAMES clang-tidy clang-tidy-19 clang-tidy-18)
+    if(CLANG_TIDY)
+        add_custom_target(tidy
+                COMMAND ${CLANG_TIDY} --quiet -p ${CMAKE_BINARY_DIR} ${TIDY_SOURCES}
+                WORKING_DIRECTORY ${SRC_ROOT}
+                COMMENT "clang-tidy (first-party translation units)")
+    else()
+        message(STATUS "clang-tidy not found -- 'tidy' target unavailable")
+    endif()
+endif()
+
 add_custom_target(format-check
         COMMAND clang-format --dry-run -Werror ${FIRST_PARTY_SOURCES}
         COMMENT "Checking BARR-C formatting")
