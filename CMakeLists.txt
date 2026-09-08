@@ -294,18 +294,35 @@ file(GLOB_RECURSE FIRST_PARTY_SOURCES CONFIGURE_DEPENDS
         ${PROD}/app/*.[ch]
         ${PROD}/services/*.[ch]
         ${PROD}/drivers/*.[ch]
+        ${PROD}/tests/*.[ch]
+        ${PROD}/tests/suites/*.[ch]
         ${PROD}/src/main_stm32.c
 )
-# production/src/ is CubeMX-generated: excluded on purpose, it will never
-# pass BARR-C formatting. Move any hand-written code out of there.
+# The rest of production/src/ is CubeMX-generated: excluded on purpose, it
+# will never pass BARR-C formatting. Move any hand-written code out of there.
 
+# cppcheck over compile_commands.json, but scoped to first-party TUs:
+#   --file-filter *production*  keeps our code, drops FreeRTOS-Kernel;
+#   --suppress *cubemx*         drops the HAL/CMSIS sources (which live under
+#                               production/cubemx and are pulled in on MCU cfgs);
+#   -D__GNUC__=13               lets the CMSIS compiler-detection headers parse;
+#   unusedFunction suppressed   -- these are library-style modules whose callers
+#                                  are other link units (tests, the .elf).
+# Run it from the desktop build (cleanest coverage); the *_stm32.c drivers are
+# additionally gated by -Wall -Wextra -Werror in the MCU build.
 add_custom_target(cppcheck
         COMMAND cppcheck
         --project=${CMAKE_BINARY_DIR}/compile_commands.json
-        --enable=all --inline-suppr
+        --enable=all --inline-suppr --check-level=normal
+        --file-filter=*production*
         --suppress=missingIncludeSystem
+        --suppress=unusedFunction
+        --suppress=checkersReport
+        --suppress=unmatchedSuppression
+        --suppress=*:*cubemx*
+        -D__GNUC__=13
         --error-exitcode=1
-        COMMENT "cppcheck (via compile_commands.json)")
+        COMMENT "cppcheck (first-party TUs via compile_commands.json)")
 
 add_custom_target(format-check
         COMMAND clang-format --dry-run -Werror ${FIRST_PARTY_SOURCES}
