@@ -4,6 +4,7 @@
 #   format          - clang-format --dry-run over the first-party sources
 #   host-test       - desktop preset: build + ctest, ASan/UBSan on
 #   static-analysis - cppcheck over the first-party translation units
+#   clang-tidy      - clang-tidy (static analyzer + bugprone/cert) over the same
 #   mcu             - ioc-check, then cross-build mcu-debug + mcu-release, size report
 #   docs            - Doxygen (warnings are errors), html uploaded as an artifact
 #   pages           - publishes the Doxygen site (main only; needs Pages = "GitHub Actions")
@@ -80,6 +81,22 @@ jobs:
         run: cmake --preset desktop            # generates compile_commands.json
       - name: Run cppcheck
         run: cmake --build build/desktop --target cppcheck
+
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-tidy-18
+          sudo ln -sf /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy
+          clang-tidy --version
+      - name: Configure
+        run: cmake --preset desktop            # generates compile_commands.json
+      - name: Run clang-tidy
+        run: cmake --build build/desktop --target tidy
 
   mcu:
     name: MCU firmware + ioc-check
