@@ -19,7 +19,15 @@ extern const GpioIf gpio_fake;
 void      gpio_fake_reset(void);
 bool      gpio_fake_is_configured(GpioPin pin);
 GpioDir   gpio_fake_dir(GpioPin pin);
-GpioLevel gpio_fake_level(GpioPin pin);                        /* current level on the pad */
-void      gpio_fake_drive_input(GpioPin pin, GpioLevel level); /* external source on the pin */
+GpioLevel gpio_fake_level(GpioPin pin); /* current level on the pad */
+
+/* Simulates an external source driving pin, exactly as gpio_stm32's ISR
+ * would see it happen on real hardware: if pin is armed via on_edge() and
+ * this transition matches the armed edge, the callback fires synchronously
+ * before this call returns. On an output pin the next write()/toggle()
+ * overwrites the level this sets. */
+void gpio_fake_drive_input(GpioPin pin, GpioLevel level);
+
+bool gpio_fake_is_armed(GpioPin pin);
 
 #endif /* GPIO_FAKE_H */

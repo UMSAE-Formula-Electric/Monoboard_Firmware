@@ -127,3 +127,94 @@ TEST(gpio_fake, reset_clears_configuration)
     CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_LOW);
     CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == GPIO_ERR_HAL);
 }
+
+typedef struct {
+    int       call_count;
+    void     *last_ctx;
+    GpioPin   last_pin;
+    GpioLevel last_level;
+} EdgeRecord;
+
+static EdgeRecord edge_record;
+
+static void on_edge(void *ctx, GpioPin pin, GpioLevel level)
+{
+    edge_record.call_count++;
+    edge_record.last_ctx   = ctx;
+    edge_record.last_pin   = pin;
+    edge_record.last_level = level;
+}
+
+static void edge_record_reset(void)
+{
+    edge_record.call_count = 0;
+    edge_record.last_ctx   = NULL;
+    edge_record.last_pin   = GPIO_PIN_TEST;
+    edge_record.last_level = GPIO_LOW;
+}
+
+TEST(gpio_fake, on_edge_rejects_output_pin)
+{
+    GpioConfig config = {.dir = GPIO_DIR_OUTPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_LOW};
+
+    gpio_fake_reset();
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == GPIO_ERR_DIR);
+}
+
+TEST(gpio_fake, on_edge_rejects_unconfigured_pin)
+{
+    gpio_fake_reset();
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == GPIO_ERR_ARG);
+    CHECK(!gpio_fake_is_armed(GPIO_PIN_TEST));
+}
+
+TEST(gpio_fake, rising_edge_fires_on_low_to_high)
+{
+    GpioConfig config = {.dir = GPIO_DIR_INPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_LOW};
+
+    gpio_fake_reset();
+    edge_record_reset();
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, (void *)0x1) == GPIO_OK);
+    CHECK(gpio_fake_is_armed(GPIO_PIN_TEST));
+
+    gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_HIGH);
+    CHECK(edge_record.call_count == 1);
+    CHECK(edge_record.last_ctx == (void *)0x1);
+    CHECK(edge_record.last_pin == GPIO_PIN_TEST);
+    CHECK(edge_record.last_level == GPIO_HIGH);
+
+    /* Falling edge does not match an armed rising watch. */
+    gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_LOW);
+    CHECK(edge_record.call_count == 1);
+}
+
+TEST(gpio_fake, both_edges_fire_either_direction)
+{
+    GpioConfig config = {.dir = GPIO_DIR_INPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_LOW};
+
+    gpio_fake_reset();
+    edge_record_reset();
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_BOTH, on_edge, NULL) == GPIO_OK);
+
+    gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_HIGH);
+    gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_LOW);
+    CHECK(edge_record.call_count == 2);
+}
+
+TEST(gpio_fake, on_edge_with_null_cb_disarms)
+{
+    GpioConfig config = {.dir = GPIO_DIR_INPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_LOW};
+
+    gpio_fake_reset();
+    edge_record_reset();
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == GPIO_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, NULL, NULL) == GPIO_OK);
+    CHECK(!gpio_fake_is_armed(GPIO_PIN_TEST));
+
+    gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_HIGH);
+    CHECK(edge_record.call_count == 0);
+}

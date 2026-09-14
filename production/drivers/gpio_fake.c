@@ -13,7 +13,15 @@ typedef struct {
     GpioLevel level;
 } FakePin;
 
-static FakePin pins[GPIO_PIN_COUNT];
+typedef struct {
+    bool       armed;
+    GpioEdge   edge;
+    GpioEdgeCb cb;
+    void      *ctx;
+} FakeEdgeWatch;
+
+static FakePin       pins[GPIO_PIN_COUNT];
+static FakeEdgeWatch edge_watches[GPIO_PIN_COUNT];
 
 static bool pin_valid(GpioPin pin)
 {
@@ -28,6 +36,27 @@ static bool dir_valid(GpioDir dir)
 static bool level_valid(GpioLevel level)
 {
     return (level == GPIO_LOW) || (level == GPIO_HIGH);
+}
+
+static bool edge_valid(GpioEdge edge)
+{
+    return (edge == GPIO_EDGE_RISING) || (edge == GPIO_EDGE_FALLING) || (edge == GPIO_EDGE_BOTH);
+}
+
+static bool edge_matches(GpioEdge armed, GpioLevel from, GpioLevel to)
+{
+    if (from == to) {
+        return false;
+    }
+    switch (armed) {
+        case GPIO_EDGE_RISING:
+            return to == GPIO_HIGH;
+        case GPIO_EDGE_FALLING:
+            return to == GPIO_LOW;
+        case GPIO_EDGE_BOTH:
+        default:
+            return true;
+    }
 }
 
 static GpioStatus fake_init(GpioPin pin, const GpioConfig *config)
@@ -95,11 +124,28 @@ static GpioStatus fake_toggle(GpioPin pin)
     return GPIO_OK;
 }
 
+static GpioStatus fake_on_edge(GpioPin pin, GpioEdge edge, GpioEdgeCb cb, void *ctx)
+{
+    if (!pin_valid(pin) || !edge_valid(edge) || !pins[pin].configured) {
+        return GPIO_ERR_ARG;
+    }
+    if (pins[pin].dir != GPIO_DIR_INPUT) {
+        return GPIO_ERR_DIR;
+    }
+
+    edge_watches[pin].armed = (cb != NULL);
+    edge_watches[pin].edge  = edge;
+    edge_watches[pin].cb    = cb;
+    edge_watches[pin].ctx   = ctx;
+    return GPIO_OK;
+}
+
 const GpioIf gpio_fake = {
-    .init   = fake_init,
-    .write  = fake_write,
-    .read   = fake_read,
-    .toggle = fake_toggle,
+    .init    = fake_init,
+    .write   = fake_write,
+    .read    = fake_read,
+    .toggle  = fake_toggle,
+    .on_edge = fake_on_edge,
 };
 
 void gpio_fake_reset(void)
@@ -107,10 +153,14 @@ void gpio_fake_reset(void)
     size_t i;
 
     for (i = 0U; i < (size_t)GPIO_PIN_COUNT; i++) {
-        pins[i].configured = false;
-        pins[i].dir        = GPIO_DIR_INPUT;
-        pins[i].pull       = GPIO_PULL_NONE;
-        pins[i].level      = GPIO_LOW;
+        pins[i].configured    = false;
+        pins[i].dir           = GPIO_DIR_INPUT;
+        pins[i].pull          = GPIO_PULL_NONE;
+        pins[i].level         = GPIO_LOW;
+        edge_watches[i].armed = false;
+        edge_watches[i].edge  = GPIO_EDGE_RISING;
+        edge_watches[i].cb    = NULL;
+        edge_watches[i].ctx   = NULL;
     }
 }
 
@@ -131,9 +181,21 @@ GpioLevel gpio_fake_level(GpioPin pin)
 
 void gpio_fake_drive_input(GpioPin pin, GpioLevel level)
 {
-    /* Simulates an external source. On an output pin the next write()
-     * or toggle() overwrites this. */
-    if (pin_valid(pin) && level_valid(level)) {
-        pins[pin].level = level;
+    GpioLevel from;
+
+    if (!pin_valid(pin) || !level_valid(level)) {
+        return;
     }
+
+    from            = pins[pin].level;
+    pins[pin].level = level;
+
+    if (edge_watches[pin].armed && edge_matches(edge_watches[pin].edge, from, level)) {
+        edge_watches[pin].cb(edge_watches[pin].ctx, pin, level);
+    }
+}
+
+bool gpio_fake_is_armed(GpioPin pin)
+{
+    return pin_valid(pin) && edge_watches[pin].armed;
 }
