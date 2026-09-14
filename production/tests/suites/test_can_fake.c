@@ -45,7 +45,7 @@ TEST(can_fake, send_before_init_fails)
     CanFrame frame = make_frame(0x100, 8);
 
     can_fake_reset();
-    CHECK(can_fake.send(&frame) == CAN_ERR_HAL);
+    CHECK(can_fake.send(&frame) == IF_HW_FAULT);
 }
 
 TEST(can_fake, init_then_send_is_captured)
@@ -55,10 +55,10 @@ TEST(can_fake, init_then_send_is_captured)
     CanFrame  captured;
 
     can_fake_reset();
-    CHECK(can_fake.init(&config) == CAN_OK);
+    CHECK(can_fake.init(&config) == IF_OK);
 
     sent = make_frame(0x123, 4);
-    CHECK(can_fake.send(&sent) == CAN_OK);
+    CHECK(can_fake.send(&sent) == IF_OK);
     CHECK(can_fake_tx_count() == 1U);
 
     CHECK(can_fake_pop_tx(&captured) == true);
@@ -73,12 +73,12 @@ TEST(can_fake, send_fails_when_tx_queue_full)
     size_t    i;
 
     can_fake_reset();
-    CHECK(can_fake.init(&config) == CAN_OK);
+    CHECK(can_fake.init(&config) == IF_OK);
 
     for (i = 0; i < CAN_FAKE_QUEUE_DEPTH; i++) {
-        CHECK(can_fake.send(&frame) == CAN_OK);
+        CHECK(can_fake.send(&frame) == IF_OK);
     }
-    CHECK(can_fake.send(&frame) == CAN_ERR_FULL);
+    CHECK(can_fake.send(&frame) == IF_BUSY);
 }
 
 TEST(can_fake, receive_without_data_times_out)
@@ -87,8 +87,8 @@ TEST(can_fake, receive_without_data_times_out)
     CanFrame  frame;
 
     can_fake_reset();
-    CHECK(can_fake.init(&config) == CAN_OK);
-    CHECK(can_fake.receive(&frame, 0) == CAN_ERR_TIMEOUT);
+    CHECK(can_fake.init(&config) == IF_OK);
+    CHECK(can_fake.receive(&frame, 0) == IF_TIMEOUT);
 }
 
 TEST(can_fake, injected_rx_is_received)
@@ -98,15 +98,15 @@ TEST(can_fake, injected_rx_is_received)
     CanFrame  received;
 
     can_fake_reset();
-    CHECK(can_fake.init(&config) == CAN_OK);
+    CHECK(can_fake.init(&config) == IF_OK);
 
     injected             = make_frame(0x321, 8);
     injected.extended_id = true;
     can_fake_inject_rx(&injected);
 
-    CHECK(can_fake.receive(&received, 0) == CAN_OK);
+    CHECK(can_fake.receive(&received, 0) == IF_OK);
     CHECK(frames_equal(&received, &injected));
-    CHECK(can_fake.receive(&received, 0) == CAN_ERR_TIMEOUT);
+    CHECK(can_fake.receive(&received, 0) == IF_TIMEOUT);
 }
 
 TEST(can_fake, reset_clears_rx_tx_and_init_state)
@@ -115,13 +115,13 @@ TEST(can_fake, reset_clears_rx_tx_and_init_state)
     CanFrame  frame  = make_frame(0x1, 1);
 
     can_fake_reset();
-    CHECK(can_fake.init(&config) == CAN_OK);
+    CHECK(can_fake.init(&config) == IF_OK);
     can_fake_inject_rx(&frame);
-    CHECK(can_fake.send(&frame) == CAN_OK);
+    CHECK(can_fake.send(&frame) == IF_OK);
 
     can_fake_reset();
 
     CHECK(can_fake_tx_count() == 0U);
-    CHECK(can_fake.receive(&frame, 0) == CAN_ERR_TIMEOUT);
-    CHECK(can_fake.send(&frame) == CAN_ERR_HAL); /* reset also un-initializes */
+    CHECK(can_fake.receive(&frame, 0) == IF_TIMEOUT);
+    CHECK(can_fake.send(&frame) == IF_HW_FAULT); /* reset also un-initializes */
 }

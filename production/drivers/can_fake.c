@@ -16,40 +16,40 @@ static size_t   tx_count;
 
 static bool initialized;
 
-static CanStatus fake_init(const CanConfig *config)
+static IfStatus fake_init(const CanConfig *config)
 {
     (void)config;
     can_fake_reset();
     initialized = true;
-    return CAN_OK;
+    return IF_OK;
 }
 
-static CanStatus fake_send(const CanFrame *frame)
+static IfStatus fake_send(const CanFrame *frame)
 {
     if (!initialized) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
     if (tx_count >= CAN_FAKE_QUEUE_DEPTH) {
-        return CAN_ERR_FULL;
+        return IF_BUSY;
     }
     tx_queue[tx_head] = *frame;
     tx_head           = (tx_head + 1U) % CAN_FAKE_QUEUE_DEPTH;
     tx_count++;
-    return CAN_OK;
+    return IF_OK;
 }
 
-static CanStatus fake_receive(CanFrame *frame, uint32_t timeout_ms)
+static IfStatus fake_receive(CanFrame *frame, uint32_t timeout_ms)
 {
     /* The fake is synchronous: there is no bus to wait on, so a
      * timeout can only ever mean "nothing was injected yet". */
     (void)timeout_ms;
     if (!initialized || rx_count == 0U) {
-        return CAN_ERR_TIMEOUT;
+        return IF_TIMEOUT;
     }
     *frame  = rx_queue[rx_tail];
     rx_tail = (rx_tail + 1U) % CAN_FAKE_QUEUE_DEPTH;
     rx_count--;
-    return CAN_OK;
+    return IF_OK;
 }
 
 const CanIf can_fake = {

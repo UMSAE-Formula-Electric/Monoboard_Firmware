@@ -164,7 +164,14 @@ endif()
 # ============================================================================
 
 # -- Interfaces: headers only; the one thing everyone may see. ---------------
-add_library(interfaces INTERFACE)
+add_library(interfaces INTERFACE
+        production/interfaces/if_status.h
+        production/interfaces/adc_if.h
+        production/interfaces/can_if.h
+        production/interfaces/gpio_if.h
+        production/interfaces/pwm_if.h
+        production/interfaces/uart_if.h
+        production/interfaces/wdg_if.h)
 target_include_directories(interfaces INTERFACE ${PROD}/interfaces)
 
 # -- Protocol modules: pure codecs. Interfaces only; no RTOS. ----------------
@@ -205,9 +212,12 @@ target_link_libraries(services
 #    a duplicate-symbol error at best, and silent "whichever the linker
 #    saw first" at worst -- i.e. shipping the fake CAN driver to a board.
 add_library(drivers_fake STATIC
+        ${PROD}/drivers/adc_fake.c
         ${PROD}/drivers/can_fake.c
         ${PROD}/drivers/gpio_fake.c
+        ${PROD}/drivers/pwm_fake.c
         ${PROD}/drivers/usart_fake.c
+        ${PROD}/drivers/wdg_fake.c
 )
 target_include_directories(drivers_fake PUBLIC ${PROD}/drivers)
 target_link_libraries(drivers_fake

@@ -14,6 +14,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "if_status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,24 +44,70 @@ typedef enum {
     GPIO_HIGH = 1,
 } GpioLevel;
 
-typedef enum {
-    GPIO_OK = 0,
-    GPIO_ERR_ARG, /* unknown pin, NULL pointer, or out-of-range enum */
-    GPIO_ERR_DIR, /* write/toggle attempted on a pin not configured as output */
-    GPIO_ERR_HAL, /* pin used before init, or the peripheral/HAL failed */
-} GpioStatus;
-
 typedef struct {
     GpioDir   dir;
     GpioPull  pull;    /* input: bias resistor; output: normally GPIO_PULL_NONE */
     GpioLevel initial; /* output only: level driven immediately at init (ignored for inputs) */
 } GpioConfig;
 
+typedef enum {
+    GPIO_EDGE_RISING = 0,
+    GPIO_EDGE_FALLING,
+    GPIO_EDGE_BOTH,
+} GpioEdge;
+
+/**
+ * Fired when a pin armed by on_edge() sees the edge it was armed for (e.g.
+ * the RTD start button). Invoked from ISR context -- FromISR APIs only,
+ * no blocking, minimal work.
+ * @param ctx    opaque pointer, exactly what was passed to on_edge()
+ * @param pin    pin that triggered
+ * @param level  level the pin settled to immediately after the edge
+ */
+typedef void (*GpioEdgeCb)(void *ctx, GpioPin pin, GpioLevel level);
+
 typedef struct {
-    GpioStatus (*init)(GpioPin pin, const GpioConfig *config);
-    GpioStatus (*write)(GpioPin pin, GpioLevel level); /* output pins only */
-    GpioStatus (*read)(GpioPin pin, GpioLevel *level); /* input or output */
-    GpioStatus (*toggle)(GpioPin pin);                 /* output pins only */
+    /**
+     * @return #IF_OK on success, or #IF_HW_FAULT on bad arguments
+     *         (unknown pin, NULL @p config, or an out-of-range enum in it)
+     */
+    IfStatus (*init)(GpioPin pin, const GpioConfig *config);
+
+    /**
+     * Output pins only.
+     * @return #IF_OK on success, or #IF_HW_FAULT on bad arguments
+     *         (unknown pin, out-of-range @p level), @p pin not configured
+     *         as an output, or @p pin never init()'d
+     */
+    IfStatus (*write)(GpioPin pin, GpioLevel level);
+
+    /**
+     * Input or output.
+     * @return #IF_OK on success, or #IF_HW_FAULT on bad arguments
+     *         (unknown pin, NULL @p level) or @p pin never init()'d
+     */
+    IfStatus (*read)(GpioPin pin, GpioLevel *level);
+
+    /**
+     * Output pins only.
+     * @return #IF_OK on success, or #IF_HW_FAULT if @p pin is unknown,
+     *         not configured as an output, or never init()'d
+     */
+    IfStatus (*toggle)(GpioPin pin);
+
+    /**
+     * Arm (or disarm) an edge-triggered callback on an input pin.
+     * Replaces whatever callback was previously armed on @p pin.
+     * @param pin   input pin to watch
+     * @param edge  which transition(s) to fire on
+     * @param cb    called from ISR context when the armed edge occurs;
+     *              NULL disarms @p pin
+     * @param ctx   opaque pointer passed back to @p cb
+     * @return #IF_OK on success, or #IF_HW_FAULT on bad arguments
+     *         (unknown pin, unknown edge, or pin never init()'d) or if
+     *         @p pin is not configured as an input
+     */
+    IfStatus (*on_edge)(GpioPin pin, GpioEdge edge, GpioEdgeCb cb, void *ctx);
 } GpioIf;
 
 #ifdef __cplusplus
