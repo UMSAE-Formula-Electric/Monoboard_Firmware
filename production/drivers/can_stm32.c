@@ -13,7 +13,7 @@
  * FreeRTOS queue (FromISR); stm32_receive() blocks on that queue from
  * task context. TX has no software queue -- bxCAN's 3 hardware
  * mailboxes are the buffer, so a full-mailbox condition is reported to
- * the caller immediately as CAN_ERR_FULL rather than retried here.
+ * the caller immediately as IF_BUSY rather than retried here.
  */
 #include "can_stm32.h"
 
@@ -95,20 +95,20 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
-static CanStatus stm32_init(const CanConfig *config)
+static IfStatus stm32_init(const CanConfig *config)
 {
     CAN_FilterTypeDef filter = {0};
     uint32_t          pclk1_hz;
     uint32_t          prescaler;
 
     if (config == NULL || config->bitrate_bps == 0U) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
     pclk1_hz  = HAL_RCC_GetPCLK1Freq();
     prescaler = pclk1_hz / (config->bitrate_bps * CAN_STM32_TIME_QUANTA);
     if (prescaler == 0U || prescaler > 1024U) {
-        return CAN_ERR_HAL; /* bitrate not achievable from this clock */
+        return IF_HW_FAULT; /* bitrate not achievable from this clock */
     }
 
     hcan1.Instance                  = CAN1;
@@ -125,7 +125,7 @@ static CanStatus stm32_init(const CanConfig *config)
     hcan1.Init.TransmitFifoPriority = DISABLE;
 
     if (HAL_CAN_Init(&hcan1) != HAL_OK) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
     /* Accept everything onto FIFO0: a 32-bit mask filter with mask=0
@@ -143,33 +143,33 @@ static CanStatus stm32_init(const CanConfig *config)
     filter.SlaveStartFilterBank = 14;
 
     if (HAL_CAN_ConfigFilter(&hcan1, &filter) != HAL_OK) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
     rx_queue_handle = xQueueCreateStatic(CAN_STM32_RX_QUEUE_DEPTH, sizeof(CanFrame),
                                          rx_queue_storage, &rx_queue_struct);
     if (rx_queue_handle == NULL) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
     if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
     if (HAL_CAN_Start(&hcan1) != HAL_OK) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
-    return CAN_OK;
+    return IF_OK;
 }
 
-static CanStatus stm32_send(const CanFrame *frame)
+static IfStatus stm32_send(const CanFrame *frame)
 {
     CAN_TxHeaderTypeDef tx_header = {0};
     uint32_t            tx_mailbox;
 
     if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0U) {
-        return CAN_ERR_FULL;
+        return IF_BUSY;
     }
 
     tx_header.IDE = frame->extended_id ? CAN_ID_EXT : CAN_ID_STD;
@@ -182,18 +182,18 @@ static CanStatus stm32_send(const CanFrame *frame)
     tx_header.DLC = frame->dlc;
 
     if (HAL_CAN_AddTxMessage(&hcan1, &tx_header, (uint8_t *)frame->data, &tx_mailbox) != HAL_OK) {
-        return CAN_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
-    return CAN_OK;
+    return IF_OK;
 }
 
-static CanStatus stm32_receive(CanFrame *frame, uint32_t timeout_ms)
+static IfStatus stm32_receive(CanFrame *frame, uint32_t timeout_ms)
 {
     if (xQueueReceive(rx_queue_handle, frame, pdMS_TO_TICKS(timeout_ms)) != pdTRUE) {
-        return CAN_ERR_TIMEOUT;
+        return IF_TIMEOUT;
     }
-    return CAN_OK;
+    return IF_OK;
 }
 
 const CanIf can_stm32 = {

@@ -37,7 +37,7 @@ int test_run_all(const char *suite_filter);
  *
  *      TEST(can_fake, send_before_init_fails)
  *      {
- *          CHECK(can_fake.send(&frame) == CAN_ERR_HAL);
+ *          CHECK(can_fake.send(&frame) == IF_HW_FAULT);
  *      }
  */
 #define TEST(suite, name)                                                     \

@@ -71,24 +71,24 @@ static bool pin_valid(GpioPin pin)
     return (unsigned int)pin < (unsigned int)GPIO_PIN_COUNT;
 }
 
-static GpioStatus stm32_init(GpioPin pin, const GpioConfig *config)
+static IfStatus stm32_init(GpioPin pin, const GpioConfig *config)
 {
     GPIO_InitTypeDef gpio_init = {0};
     const PinMap    *map;
 
     if (!pin_valid(pin) || (config == NULL)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     if ((config->dir != GPIO_DIR_INPUT) && (config->dir != GPIO_DIR_OUTPUT)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
 
     map = &pin_map[pin];
     if (map->port == NULL) {
-        return GPIO_ERR_ARG; /* catalogue entry with no wiring */
+        return IF_HW_FAULT; /* catalogue entry with no wiring */
     }
     if (!enable_port_clock(map->port)) {
-        return GPIO_ERR_HAL;
+        return IF_HW_FAULT;
     }
 
     if (config->dir == GPIO_DIR_OUTPUT) {
@@ -105,39 +105,39 @@ static GpioStatus stm32_init(GpioPin pin, const GpioConfig *config)
     gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(map->port, &gpio_init);
 
-    return GPIO_OK;
+    return IF_OK;
 }
 
-static GpioStatus stm32_write(GpioPin pin, GpioLevel level)
+static IfStatus stm32_write(GpioPin pin, GpioLevel level)
 {
     if (!pin_valid(pin)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     if ((level != GPIO_LOW) && (level != GPIO_HIGH)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     HAL_GPIO_WritePin(pin_map[pin].port, pin_map[pin].pad,
                       (level == GPIO_HIGH) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    return GPIO_OK;
+    return IF_OK;
 }
 
-static GpioStatus stm32_read(GpioPin pin, GpioLevel *level)
+static IfStatus stm32_read(GpioPin pin, GpioLevel *level)
 {
     if (!pin_valid(pin) || (level == NULL)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     *level = (HAL_GPIO_ReadPin(pin_map[pin].port, pin_map[pin].pad) == GPIO_PIN_SET) ? GPIO_HIGH
                                                                                      : GPIO_LOW;
-    return GPIO_OK;
+    return IF_OK;
 }
 
-static GpioStatus stm32_toggle(GpioPin pin)
+static IfStatus stm32_toggle(GpioPin pin)
 {
     if (!pin_valid(pin)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     HAL_GPIO_TogglePin(pin_map[pin].port, pin_map[pin].pad);
-    return GPIO_OK;
+    return IF_OK;
 }
 
 const GpioIf gpio_stm32 = {

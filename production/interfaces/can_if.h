@@ -14,18 +14,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "if_status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define CAN_MAX_DLC 8U
-
-typedef enum {
-    CAN_OK = 0,
-    CAN_ERR_TIMEOUT, /* receive: no frame arrived within timeout_ms */
-    CAN_ERR_FULL,    /* send: no free hardware mailbox */
-    CAN_ERR_HAL,     /* underlying peripheral/HAL reported a failure */
-} CanStatus;
 
 typedef struct {
     uint32_t id;          /* 11-bit standard or 29-bit extended identifier */
@@ -50,31 +45,32 @@ typedef struct {
     /**
      * Bring the CAN peripheral up and make it ready to send/receive.
      * @param config  nominal bit rate and loopback selection
-     * @return #CAN_OK on success, or #CAN_ERR_HAL if @p config is invalid
+     * @return #IF_OK on success, or #IF_HW_FAULT if @p config is invalid
      *         (NULL, zero bit rate, rate unreachable from the peripheral
      *         clock) or the underlying peripheral/HAL rejected the setup
      */
-    CanStatus (*init)(const CanConfig *config);
+    IfStatus (*init)(const CanConfig *config);
 
     /**
      * Hand one frame to the transmitter. Non-blocking: the call returns as
      * soon as the frame is queued in hardware, not when it reaches the bus.
      * @param frame  frame to transmit; the first @c dlc bytes of @c data are sent
-     * @return #CAN_OK if the frame was accepted, #CAN_ERR_FULL if every
-     *         hardware mailbox is busy, #CAN_ERR_HAL on a peripheral fault
-     *         or if called before init()
+     * @return #IF_OK if the frame was accepted, #IF_BUSY if every
+     *         hardware mailbox is busy (the caller should retry, not
+     *         drop), or #IF_HW_FAULT on a peripheral fault or if called
+     *         before init()
      */
-    CanStatus (*send)(const CanFrame *frame);
+    IfStatus (*send)(const CanFrame *frame);
 
     /**
      * Take the oldest received frame, waiting up to @p timeout_ms for one
      * to arrive.
-     * @param      frame       [out] populated with the received frame on #CAN_OK
+     * @param      frame       [out] populated with the received frame on #IF_OK
      * @param      timeout_ms  maximum time to block, in milliseconds (0 = poll)
-     * @return #CAN_OK if a frame was written to @p frame, or #CAN_ERR_TIMEOUT
+     * @return #IF_OK if a frame was written to @p frame, or #IF_TIMEOUT
      *         if none arrived within @p timeout_ms
      */
-    CanStatus (*receive)(CanFrame *frame, uint32_t timeout_ms);
+    IfStatus (*receive)(CanFrame *frame, uint32_t timeout_ms);
 } CanIf;
 
 #ifdef __cplusplus

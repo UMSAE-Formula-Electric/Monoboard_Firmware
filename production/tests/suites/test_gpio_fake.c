@@ -11,7 +11,7 @@
 TEST(gpio_fake, write_before_init_fails)
 {
     gpio_fake_reset();
-    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == GPIO_ERR_HAL);
+    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == IF_HW_FAULT);
     CHECK(!gpio_fake_is_configured(GPIO_PIN_TEST));
 }
 
@@ -21,11 +21,11 @@ TEST(gpio_fake, output_init_drives_initial_level)
     GpioLevel  level;
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
     CHECK(gpio_fake_is_configured(GPIO_PIN_TEST));
     CHECK(gpio_fake_dir(GPIO_PIN_TEST) == GPIO_DIR_OUTPUT);
 
-    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == GPIO_OK);
+    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == IF_OK);
     CHECK(level == GPIO_HIGH);
 }
 
@@ -35,11 +35,11 @@ TEST(gpio_fake, write_then_read_roundtrips)
     GpioLevel  level;
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
 
-    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == GPIO_OK);
+    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == IF_OK);
     CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_HIGH);
-    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == GPIO_OK);
+    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == IF_OK);
     CHECK(level == GPIO_HIGH);
 }
 
@@ -48,11 +48,11 @@ TEST(gpio_fake, toggle_flips_output)
     GpioConfig config = {.dir = GPIO_DIR_OUTPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_LOW};
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
 
-    CHECK(gpio_fake.toggle(GPIO_PIN_TEST) == GPIO_OK);
+    CHECK(gpio_fake.toggle(GPIO_PIN_TEST) == IF_OK);
     CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_HIGH);
-    CHECK(gpio_fake.toggle(GPIO_PIN_TEST) == GPIO_OK);
+    CHECK(gpio_fake.toggle(GPIO_PIN_TEST) == IF_OK);
     CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_LOW);
 }
 
@@ -61,9 +61,9 @@ TEST(gpio_fake, writing_an_input_is_rejected)
     GpioConfig config = {.dir = GPIO_DIR_INPUT, .pull = GPIO_PULL_DOWN, .initial = GPIO_LOW};
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
-    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == GPIO_ERR_DIR);
-    CHECK(gpio_fake.toggle(GPIO_PIN_TEST) == GPIO_ERR_DIR);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
+    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == IF_HW_FAULT);
+    CHECK(gpio_fake.toggle(GPIO_PIN_TEST) == IF_HW_FAULT);
 }
 
 TEST(gpio_fake, input_reads_driven_level)
@@ -72,14 +72,14 @@ TEST(gpio_fake, input_reads_driven_level)
     GpioLevel  level;
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
 
     gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_HIGH);
-    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == GPIO_OK);
+    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == IF_OK);
     CHECK(level == GPIO_HIGH);
 
     gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_LOW);
-    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == GPIO_OK);
+    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == IF_OK);
     CHECK(level == GPIO_LOW);
 }
 
@@ -89,8 +89,8 @@ TEST(gpio_fake, input_pullup_defaults_high)
     GpioLevel  level;
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
-    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
+    CHECK(gpio_fake.read(GPIO_PIN_TEST, &level) == IF_OK);
     CHECK(level == GPIO_HIGH);
 }
 
@@ -100,9 +100,9 @@ TEST(gpio_fake, unknown_pin_is_rejected)
     GpioLevel  level;
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_COUNT, &config) == GPIO_ERR_ARG);
-    CHECK(gpio_fake.write(GPIO_PIN_COUNT, GPIO_HIGH) == GPIO_ERR_ARG);
-    CHECK(gpio_fake.read(GPIO_PIN_COUNT, &level) == GPIO_ERR_ARG);
+    CHECK(gpio_fake.init(GPIO_PIN_COUNT, &config) == IF_HW_FAULT);
+    CHECK(gpio_fake.write(GPIO_PIN_COUNT, GPIO_HIGH) == IF_HW_FAULT);
+    CHECK(gpio_fake.read(GPIO_PIN_COUNT, &level) == IF_HW_FAULT);
 }
 
 TEST(gpio_fake, read_rejects_null_out)
@@ -110,8 +110,8 @@ TEST(gpio_fake, read_rejects_null_out)
     GpioConfig config = {.dir = GPIO_DIR_OUTPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_LOW};
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
-    CHECK(gpio_fake.read(GPIO_PIN_TEST, NULL) == GPIO_ERR_ARG);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
+    CHECK(gpio_fake.read(GPIO_PIN_TEST, NULL) == IF_HW_FAULT);
 }
 
 TEST(gpio_fake, reset_clears_configuration)
@@ -119,13 +119,13 @@ TEST(gpio_fake, reset_clears_configuration)
     GpioConfig config = {.dir = GPIO_DIR_OUTPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_HIGH};
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
 
     gpio_fake_reset();
 
     CHECK(!gpio_fake_is_configured(GPIO_PIN_TEST));
     CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_LOW);
-    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == GPIO_ERR_HAL);
+    CHECK(gpio_fake.write(GPIO_PIN_TEST, GPIO_HIGH) == IF_HW_FAULT);
 }
 
 typedef struct {
@@ -158,14 +158,14 @@ TEST(gpio_fake, on_edge_rejects_output_pin)
     GpioConfig config = {.dir = GPIO_DIR_OUTPUT, .pull = GPIO_PULL_NONE, .initial = GPIO_LOW};
 
     gpio_fake_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
-    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == GPIO_ERR_DIR);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == IF_HW_FAULT);
 }
 
 TEST(gpio_fake, on_edge_rejects_unconfigured_pin)
 {
     gpio_fake_reset();
-    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == GPIO_ERR_ARG);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == IF_HW_FAULT);
     CHECK(!gpio_fake_is_armed(GPIO_PIN_TEST));
 }
 
@@ -175,8 +175,8 @@ TEST(gpio_fake, rising_edge_fires_on_low_to_high)
 
     gpio_fake_reset();
     edge_record_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
-    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, (void *)0x1) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, (void *)0x1) == IF_OK);
     CHECK(gpio_fake_is_armed(GPIO_PIN_TEST));
 
     gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_HIGH);
@@ -196,8 +196,8 @@ TEST(gpio_fake, both_edges_fire_either_direction)
 
     gpio_fake_reset();
     edge_record_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
-    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_BOTH, on_edge, NULL) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_BOTH, on_edge, NULL) == IF_OK);
 
     gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_HIGH);
     gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_LOW);
@@ -210,9 +210,9 @@ TEST(gpio_fake, on_edge_with_null_cb_disarms)
 
     gpio_fake_reset();
     edge_record_reset();
-    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == GPIO_OK);
-    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == GPIO_OK);
-    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, NULL, NULL) == GPIO_OK);
+    CHECK(gpio_fake.init(GPIO_PIN_TEST, &config) == IF_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, on_edge, NULL) == IF_OK);
+    CHECK(gpio_fake.on_edge(GPIO_PIN_TEST, GPIO_EDGE_RISING, NULL, NULL) == IF_OK);
     CHECK(!gpio_fake_is_armed(GPIO_PIN_TEST));
 
     gpio_fake_drive_input(GPIO_PIN_TEST, GPIO_HIGH);

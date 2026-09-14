@@ -59,12 +59,12 @@ static bool edge_matches(GpioEdge armed, GpioLevel from, GpioLevel to)
     }
 }
 
-static GpioStatus fake_init(GpioPin pin, const GpioConfig *config)
+static IfStatus fake_init(GpioPin pin, const GpioConfig *config)
 {
     FakePin *p;
 
     if (!pin_valid(pin) || (config == NULL) || !dir_valid(config->dir)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
 
     p             = &pins[pin];
@@ -79,65 +79,65 @@ static GpioStatus fake_init(GpioPin pin, const GpioConfig *config)
          * it yet, so seed it from the configured bias resistor. */
         p->level = (config->pull == GPIO_PULL_UP) ? GPIO_HIGH : GPIO_LOW;
     }
-    return GPIO_OK;
+    return IF_OK;
 }
 
-static GpioStatus fake_write(GpioPin pin, GpioLevel level)
+static IfStatus fake_write(GpioPin pin, GpioLevel level)
 {
     if (!pin_valid(pin) || !level_valid(level)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     if (!pins[pin].configured) {
-        return GPIO_ERR_HAL;
+        return IF_HW_FAULT;
     }
     if (pins[pin].dir != GPIO_DIR_OUTPUT) {
-        return GPIO_ERR_DIR;
+        return IF_HW_FAULT;
     }
     pins[pin].level = level;
-    return GPIO_OK;
+    return IF_OK;
 }
 
-static GpioStatus fake_read(GpioPin pin, GpioLevel *level)
+static IfStatus fake_read(GpioPin pin, GpioLevel *level)
 {
     if (!pin_valid(pin) || (level == NULL)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     if (!pins[pin].configured) {
-        return GPIO_ERR_HAL;
+        return IF_HW_FAULT;
     }
     *level = pins[pin].level;
-    return GPIO_OK;
+    return IF_OK;
 }
 
-static GpioStatus fake_toggle(GpioPin pin)
+static IfStatus fake_toggle(GpioPin pin)
 {
     if (!pin_valid(pin)) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     if (!pins[pin].configured) {
-        return GPIO_ERR_HAL;
+        return IF_HW_FAULT;
     }
     if (pins[pin].dir != GPIO_DIR_OUTPUT) {
-        return GPIO_ERR_DIR;
+        return IF_HW_FAULT;
     }
     pins[pin].level = (pins[pin].level == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
-    return GPIO_OK;
+    return IF_OK;
 }
 
-static GpioStatus fake_on_edge(GpioPin pin, GpioEdge edge, GpioEdgeCb cb, void *ctx)
+static IfStatus fake_on_edge(GpioPin pin, GpioEdge edge, GpioEdgeCb cb, void *ctx)
 {
     if (!pin_valid(pin) || !edge_valid(edge) || !pins[pin].configured) {
-        return GPIO_ERR_ARG;
+        return IF_HW_FAULT;
     }
     if (pins[pin].dir != GPIO_DIR_INPUT) {
-        return GPIO_ERR_DIR;
+        return IF_HW_FAULT;
     }
 
     edge_watches[pin].armed = (cb != NULL);
     edge_watches[pin].edge  = edge;
     edge_watches[pin].cb    = cb;
     edge_watches[pin].ctx   = ctx;
-    return GPIO_OK;
+    return IF_OK;
 }
 
 const GpioIf gpio_fake = {
