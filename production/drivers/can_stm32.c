@@ -20,7 +20,7 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
-#include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_can.h"
 
 #define CAN_STM32_RX_QUEUE_DEPTH 16U
 #define CAN_STM32_TIME_QUANTA    16U /* 1 (sync) + BS1 + BS2 */

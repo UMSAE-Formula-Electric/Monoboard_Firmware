@@ -207,6 +207,7 @@ target_link_libraries(services
 add_library(drivers_fake STATIC
         ${PROD}/drivers/can_fake.c
         ${PROD}/drivers/gpio_fake.c
+        ${PROD}/drivers/usart_fake.c
 )
 target_include_directories(drivers_fake PUBLIC ${PROD}/drivers)
 target_link_libraries(drivers_fake
@@ -219,6 +220,7 @@ if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/can_stm32.c
             ${PROD}/drivers/gpio_stm32.c
+            ${PROD}/drivers/usart_stm32.c
     )
     target_include_directories(drivers_stm32 PUBLIC ${PROD}/drivers)
     target_link_libraries(drivers_stm32
