@@ -29,6 +29,7 @@ endif()
 # Declared so it shows up in ccmake/cmake-gui instead of being a
 # silently-off magic word.
 option(SANITIZE "Build desktop/test targets with ASan+UBSan" OFF)
+option(COVERAGE "Build desktop/test targets with gcov instrumentation (--coverage)" OFF)
 
 # ============================================================================
 # MCU / PATH CONFIGURATION
@@ -89,6 +90,18 @@ if(NOT PLATFORM_MCU AND SANITIZE)
     target_link_options(sanitizers INTERFACE
             -fsanitize=address,undefined)
 endif()
+
+# gcov instrumentation, same shape as `sanitizers`. Every first-party desktop
+# target already links `sanitizers` PUBLIC, so riding on it instruments all of
+# them (and any target added later) while FreeRTOS -- which links neither --
+# stays uninstrumented. -O0 keeps line/branch counts mapped to the source.
+# See the `coverage` target below and the `coverage` preset.
+add_library(coverage_flags INTERFACE)
+if(NOT PLATFORM_MCU AND COVERAGE)
+    target_compile_options(coverage_flags INTERFACE --coverage -O0)
+    target_link_options(coverage_flags INTERFACE --coverage)
+endif()
+target_link_libraries(sanitizers INTERFACE coverage_flags)
 
 # ============================================================================
 # FREERTOS KERNEL (port selected by platform; config in its own dir)
@@ -357,6 +370,44 @@ if(NOT PLATFORM_MCU)
                 COMMENT "clang-tidy (first-party translation units)")
     else()
         message(STATUS "clang-tidy not found -- 'tidy' target unavailable")
+    endif()
+endif()
+
+# Coverage report (desktop COVERAGE=ON builds only): zero the counters, run the
+# whole CTest suite, then gcovr over first-party code. The filter is the whole
+# measurement scope -- lib/ (FreeRTOS), production/cubemx/ (HAL/CMSIS/CubeMX),
+# production/tests/ and the MCU-only *_stm32.c drivers are never in it.
+# Outputs land in <build>/coverage/: index.html (browsable), cobertura.xml (CI
+# tooling), summary.json (per-file totals). tools/coverage_summary.py rolls
+# those up per area; the driver fakes are reported but kept out of the
+# headline number (they are test doubles, not shipped code).
+if(NOT PLATFORM_MCU AND COVERAGE)
+    find_program(GCOVR gcovr)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(GCOVR AND Python3_Interpreter_FOUND)
+        set(COVERAGE_DIR ${CMAKE_BINARY_DIR}/coverage)
+        add_custom_target(coverage
+                COMMAND find ${CMAKE_BINARY_DIR} -name *.gcda -delete
+                COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} --output-on-failure
+                COMMAND ${CMAKE_COMMAND} -E make_directory ${COVERAGE_DIR}
+                COMMAND ${GCOVR}
+                --root ${SRC_ROOT}
+                --object-directory ${CMAKE_BINARY_DIR}
+                --filter "${PROD}/(app|proto|services|drivers)/"
+                --exclude ".*_stm32\\.c$"
+                --exclude-unreachable-branches
+                --html-details ${COVERAGE_DIR}/index.html
+                --cobertura ${COVERAGE_DIR}/cobertura.xml
+                --json-summary-pretty --json-summary ${COVERAGE_DIR}/summary.json
+                --txt-summary
+                COMMAND ${Python3_EXECUTABLE} ${SRC_ROOT}/tools/coverage_summary.py
+                ${COVERAGE_DIR}/summary.json
+                WORKING_DIRECTORY ${SRC_ROOT}
+                COMMENT "Coverage report -> ${COVERAGE_DIR}/index.html"
+                VERBATIM)
+        add_dependencies(coverage unit_test)
+    else()
+        message(STATUS "gcovr or Python3 not found -- 'coverage' target unavailable")
     endif()
 endif()
 

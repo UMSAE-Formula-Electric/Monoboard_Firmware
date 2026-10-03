@@ -5,6 +5,9 @@
 #   host-test       - desktop preset: build + ctest, ASan/UBSan on
 #   static-analysis - cppcheck over the first-party translation units
 #   clang-tidy      - clang-tidy (static analyzer + bugprone/cert) over the same
+#   coverage        - coverage preset (gcov): per-area table + delta vs. the PR base
+#                     in the job summary, HTML report artifact. Non-blocking: it
+#                     fails only if the build or tests do, never on a percentage.
 #   mcu             - ioc-check, then cross-build mcu-debug + mcu-release, size report
 #   docs            - Doxygen (warnings are errors), html uploaded as an artifact
 #   pages           - publishes the Doxygen site (main only; needs Pages = "GitHub Actions")
@@ -97,6 +100,59 @@ jobs:
         run: cmake --preset desktop            # generates compile_commands.json
       - name: Run clang-tidy
         run: cmake --build build/desktop --target tidy
+
+  coverage:
+    name: coverage (desktop, gcov)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gcovr
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcovr
+          gcovr --version
+      - name: Build, test, report
+        run: |
+          cmake --preset coverage
+          cmake --build --preset coverage
+      - name: Baseline (PR base commit)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Same recipe on the base commit. A base without the coverage preset
+          # (or a broken one) just means "no delta" -- never a failed check.
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/base"
+          if cmake --preset coverage && cmake --build --preset coverage; then
+            echo "Baseline coverage built."
+          else
+            echo "::notice::No coverage baseline on the base commit; delta omitted."
+          fi
+      - name: Job summary
+        if: ${{ !cancelled() }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="$RUNNER_TEMP/base/build/coverage/coverage/summary.json"
+          args=(build/coverage/coverage/summary.json)
+          if [ -f "$base" ]; then args+=(--base "$base"); fi
+          {
+            echo '### Desktop coverage'
+            if [ -f "$base" ]; then echo "Delta in percentage points vs. base commit ${BASE_SHA}."; fi
+            echo
+            python3 tools/coverage_summary.py "${args[@]}"
+            echo
+            echo 'Full per-line report: the `coverage-html` artifact (open `index.html`).'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: build/coverage/coverage/
+          if-no-files-found: warn
 
   mcu:
     name: MCU firmware + ioc-check
