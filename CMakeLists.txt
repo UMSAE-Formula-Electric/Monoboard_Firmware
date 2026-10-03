@@ -214,6 +214,7 @@ target_link_libraries(services
 add_library(drivers_fake STATIC
         ${PROD}/drivers/adc_fake.c
         ${PROD}/drivers/can_fake.c
+        ${PROD}/drivers/crash_record.c        # pure; shared with drivers_stm32
         ${PROD}/drivers/gpio_fake.c
         ${PROD}/drivers/pwm_fake.c
         ${PROD}/drivers/usart_fake.c
@@ -229,6 +230,8 @@ target_link_libraries(drivers_fake
 if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/can_stm32.c
+            ${PROD}/drivers/crash_record.c    # pure; also in drivers_fake for tests
+            ${PROD}/drivers/fault_stm32.c
             ${PROD}/drivers/gpio_stm32.c
             ${PROD}/drivers/usart_stm32.c
     )
