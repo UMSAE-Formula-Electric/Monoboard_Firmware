@@ -218,3 +218,34 @@ policy: drop and count.
 *upward* (driver ISR → queue → service task → application function), while
 compile-time dependencies still point only downward. This is the intended
 shape, made possible by the interface vtables and queue handoffs.
+
+**Fatal errors** (issue #46; *status: proposed, pending team review*) —
+what the firmware does when a FreeRTOS safety net fires: a failed
+`configASSERT`, a stack overflow (`configCHECK_FOR_STACK_OVERFLOW=2`), or
+`vApplicationMallocFailedHook` (unreachable while no `heap_*.c` is linked;
+if it ever fires, the composition root has a bug).
+
+- **Policy: stop, record, reset.** No attempt is made to drive the car into
+  a safe state from inside the fault path. Once one of these fires, kernel
+  or task state is no longer trustworthy, and "send a zero-torque command"
+  would run on exactly the code that just failed. The safe state is instead
+  guaranteed outside the firmware: on reset every STM32 pin returns to a
+  high-impedance input, so board-level default pulls must hold every
+  actuator / enable output off, and the shutdown circuit opens when this
+  board stops asserting its OK signal. The IWDG is the backstop when even
+  the reset path cannot run. *Review item: confirm with the electrical
+  team that every output's reset state is the safe state.*
+- **Sequence** (`production/services/rtos_hooks.c`): interrupts off →
+  fill a `FaultRecord` (assert file/line, or offending task name) → hand it
+  to the `FatalIf` the composition root installed with
+  `rtos_hooks_install()`. A nested fault, or no handler installed yet,
+  falls back to "interrupts off, spin" and the watchdog resets.
+- **On target** (`fatal_stm32`): store the record for the next boot (seam
+  for the crash dump, #45), then `NVIC_SystemReset()`. Debug builds only:
+  if a debugger is attached, `BKPT` first so the fault is inspected in
+  place. Release builds never halt.
+- **On desktop** (`fatal_fake`): print the record and `abort()` — a fault
+  fails the test run or sim; it never prints and continues.
+- **Tick hook** stays off: it runs in the SysTick ISR at 1 kHz, and nothing
+  yet needs per-tick work. **Idle hook** only increments the counter
+  Healthrun (#38) reads (`rtos_hooks_idle_count()`).

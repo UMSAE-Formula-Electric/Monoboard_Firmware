@@ -345,9 +345,11 @@
  * functionality in the build.  Set to 0 to exclude the hook functionality from
  * the build.  The application writer is responsible for providing the hook
  * function for any set to 1.  See https://www.freertos.org/a00016.html. */
-#define configUSE_IDLE_HOOK                   0
+/* Monoboard (issue #46): same hook set as config/mcu, same implementation
+ * (production/services/rtos_hooks.c). */
+#define configUSE_IDLE_HOOK                   1
 #define configUSE_TICK_HOOK                   0
-#define configUSE_MALLOC_FAILED_HOOK          0
+#define configUSE_MALLOC_FAILED_HOOK          1
 #define configUSE_DAEMON_TASK_STARTUP_HOOK    0
 
 /* Set configUSE_SB_COMPLETED_CALLBACK to 1 to have send and receive completed
@@ -424,14 +426,21 @@
  * )" or it can simple disable interrupts and sit in a loop to halt all
  * execution on the failing line for viewing in a debugger. */
 
+/* Monoboard (issue #46): same target as config/mcu. On the desktop the
+ * installed FatalIf (fatal_fake) prints file:line and abort()s, so a
+ * failed assert fails the test run / sim instead of hanging it. */
+void rtos_assert_failed( const char * file,
+                         int line ) __attribute__( ( noreturn ) );
+
 /* *INDENT-OFF* */
-#define configASSERT( x )         \
-    if( ( x ) == 0 )              \
-    {                             \
-        taskDISABLE_INTERRUPTS(); \
-        for( ; ; )                \
-        ;                         \
-    }
+#define configASSERT( x )                              \
+    do                                                 \
+    {                                                  \
+        if( ( x ) == 0 )                               \
+        {                                              \
+            rtos_assert_failed( __FILE__, __LINE__ );  \
+        }                                              \
+    } while( 0 )
 /* *INDENT-ON* */
 
 /******************************************************************************/
@@ -581,7 +590,8 @@
  * respectively. The application can provide it's own implementation of
  * vApplicationGetIdleTaskMemory() and vApplicationGetTimerTaskMemory() by
  * setting configKERNEL_PROVIDED_STATIC_MEMORY to 0 or leaving it undefined. */
-#define configKERNEL_PROVIDED_STATIC_MEMORY    1
+/* Monoboard: 0 -- rtos_hooks.c provides them, as on the MCU. */
+#define configKERNEL_PROVIDED_STATIC_MEMORY    0
 
 /******************************************************************************/
 /* ARMv8-M port Specific Configuration definitions. ***************************/
