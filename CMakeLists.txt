@@ -228,6 +228,7 @@ target_link_libraries(drivers_fake
 #    and the HAL is PRIVATE: its headers stop here, leaking to no one.
 if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
+            ${PROD}/drivers/adc_stm32.c
             ${PROD}/drivers/can_stm32.c
             ${PROD}/drivers/gpio_stm32.c
             ${PROD}/drivers/usart_stm32.c
