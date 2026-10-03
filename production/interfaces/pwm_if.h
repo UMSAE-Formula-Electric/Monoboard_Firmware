@@ -7,10 +7,18 @@
  * halves use separate channel catalogues -- output compare and input
  * capture are different timer hardware, usually different pins.
  *
- * Frequency is all this layer reports for a captured signal -- raw and
- * hardware-flavored, per ARCHITECTURE.md. Deciding what a given frequency
- * *means* (which state, which fault code) is a service's job, not this
- * contract's.
+ * For a captured signal this layer reports frequency and duty cycle --
+ * raw and hardware-flavored, per ARCHITECTURE.md. Deciding what a given
+ * frequency or duty *means* (which state, which insulation resistance,
+ * which fault code) is a service's job, not this contract's. Duty was
+ * added for issue #17: the IMD (#36) encodes its state in frequency and
+ * its measurement in duty, so both come from the same captured period.
+ *
+ * "No edges" and "measured 0% duty" are deliberately distinct: a signal
+ * held at a constant level produces no edges, so there is no period to
+ * measure, and read_frequency()/read_duty_permille() report #IF_TIMEOUT
+ * rather than inventing a 0 Hz / 0% reading. A disconnected input must
+ * never look like a plausible measurement.
  *
  * Header-only, standard-library types only -- see ARCHITECTURE.md,
  * Interface Layer rules. Channels are named logically (PwmChannel,
@@ -115,6 +123,23 @@ typedef struct {
      *         channel that has never been armed via start_capture())
      */
     IfStatus (*read_frequency)(PwmCaptureChannel channel, uint32_t *out_frequency_hz);
+
+    /**
+     * Read the duty cycle of the most recently measured period on
+     * @p channel -- the same period read_frequency() reports, so the two
+     * always describe one consistent measurement. Same arming, staleness
+     * and last-known-good rules as read_frequency().
+     * @param      channel            capture channel to read
+     * @param      out_duty_permille  [out] high time / period, 0-1000
+     *                                (permille, not percent: IMD duty
+     *                                resolution matters below 1%)
+     * @return #IF_OK if @p out_duty_permille holds a real measurement,
+     *         #IF_TIMEOUT if @p channel has completed no full period yet
+     *         or the signal has gone stale, or #IF_HW_FAULT on bad
+     *         arguments (unknown channel, NULL @p out_duty_permille, or a
+     *         channel that has never been armed via start_capture())
+     */
+    IfStatus (*read_duty_permille)(PwmCaptureChannel channel, uint16_t *out_duty_permille);
 } PwmIf;
 
 #ifdef __cplusplus
