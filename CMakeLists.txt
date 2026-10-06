@@ -346,6 +346,22 @@ else()
     # the desktop build is itself a layering check.
     enable_testing()
     add_subdirectory(production/tests)   # was `tests` -- no such dir at root
+
+    # Desktop simulation (#52): the full task set on the POSIX port, every
+    # service wired to its *_fake driver. Runnable by hand
+    # (`build/desktop/monoboard_sim`, runs until killed) and as a bounded
+    # CTest smoke case that must start the scheduler and exit cleanly.
+    add_executable(monoboard_sim ${PROD}/src/main_desktop.c)
+    target_link_libraries(monoboard_sim PRIVATE
+            services proto app
+            drivers_fake                # drivers_stm32 deliberately NOT here
+            freertos_kernel
+            warnings)
+    add_test(NAME desktop_sim_smoke
+            COMMAND monoboard_sim --duration-ms 500)
+    set_tests_properties(desktop_sim_smoke PROPERTIES
+            TIMEOUT 30
+            PASS_REGULAR_EXPRESSION "SIM_RESULT status=pass")
 endif()
 
 # ============================================================================
@@ -361,6 +377,7 @@ file(GLOB_RECURSE FIRST_PARTY_SOURCES CONFIGURE_DEPENDS
         ${PROD}/tests/*.[ch]
         ${PROD}/tests/suites/*.[ch]
         ${PROD}/src/main_stm32.c
+        ${PROD}/src/main_desktop.c
 )
 # The rest of production/src/ is CubeMX-generated: excluded on purpose, it
 # will never pass BARR-C formatting. Move any hand-written code out of there.
