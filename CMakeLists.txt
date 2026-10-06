@@ -477,7 +477,7 @@ if(NOT PLATFORM_MCU AND COVERAGE)
                 WORKING_DIRECTORY ${SRC_ROOT}
                 COMMENT "Coverage report -> ${COVERAGE_DIR}/index.html"
                 VERBATIM)
-        add_dependencies(coverage unit_test)
+        add_dependencies(coverage unit_test monoboard_sim)
     else()
         message(STATUS "gcovr or Python3 not found -- 'coverage' target unavailable")
     endif()

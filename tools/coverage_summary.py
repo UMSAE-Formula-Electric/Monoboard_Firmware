@@ -54,7 +54,7 @@ def percent(covered, total):
 def cell(covered, total, base=None):
     pct = percent(covered, total)
     if pct is None:
-        text = "n/a (0)"
+        text = f"n/a ({covered}/{total})"
     else:
         text = f"{pct:.1f}% ({covered}/{total})"
     if base is not None:
@@ -75,16 +75,27 @@ def main():
     head = rollup(args.summary)
     base = rollup(args.base) if args.base else None
 
-    print("| area | lines | branches |")
-    print("|---|---|---|")
+    rows = []
     for label in [a[0] for a in AREAS] + [HEADLINE]:
         lc, lt, bc, bt = head[label]
         if base is None:
-            print(f"| {label} | {cell(lc, lt)} | {cell(bc, bt)} |")
+            rows.append((label, cell(lc, lt), cell(bc, bt)))
         else:
             blc, blt, bbc, bbt = base[label]
-            print(f"| {label} | {cell(lc, lt, (blc, blt))} "
-                  f"| {cell(bc, bt, (bbc, bbt))} |")
+            rows.append((label, cell(lc, lt, (blc, blt)),
+                         cell(bc, bt, (bbc, bbt))))
+
+    # Pad every column to its widest cell so the table lines up in a terminal
+    # too; the padding is still valid Markdown for the job summary.
+    header = ("area", "lines", "branches")
+    widths = [max(len(r[i]) for r in rows + [header]) for i in range(3)]
+    print(f"| {header[0]:<{widths[0]}} | {header[1]:>{widths[1]}} "
+          f"| {header[2]:>{widths[2]}} |")
+    print(f"|{'-' * (widths[0] + 2)}|{'-' * (widths[1] + 1)}:"
+          f"|{'-' * (widths[2] + 1)}:|")
+    for label, lines, branches in rows:
+        print(f"| {label:<{widths[0]}} | {lines:>{widths[1]}} "
+              f"| {branches:>{widths[2]}} |")
     return 0
 
 
