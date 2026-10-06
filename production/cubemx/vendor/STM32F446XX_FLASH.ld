@@ -76,6 +76,17 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  /* Firmware identity record (BuildInfo, issue #49 -- not CubeMX output:
+     re-apply if this file is regenerated). Pinned straight after the vector
+     table so it sits at a fixed, early offset in every image, and KEPT
+     because nothing references it at link time. */
+  .build_info :
+  {
+    . = ALIGN(4);
+    KEEP(*(.build_info))
+    . = ALIGN(4);
+  } >FLASH
+
   /* The program code and other data goes into FLASH */
   .text :
   {

@@ -141,6 +141,7 @@ if(PLATFORM_MCU)
     add_library(stm32_hal STATIC
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_gpio.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_iwdg.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_usart.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
@@ -167,7 +168,9 @@ endif()
 add_library(interfaces INTERFACE
         production/interfaces/if_status.h
         production/interfaces/adc_if.h
+        production/interfaces/build_info_types.h
         production/interfaces/can_if.h
+        production/interfaces/fatal_if.h
         production/interfaces/gpio_if.h
         production/interfaces/pwm_if.h
         production/interfaces/uart_if.h
@@ -206,6 +209,46 @@ target_link_libraries(services
 # If someone adds `#include "can_stm32.h"` to a service: not on the
 # include path -> compile error. That IS the architecture review.
 
+# -- Build info (issue #49): git/toolchain identity embedded in every image. --
+#    cmake/build_info.cmake writes build_info.h into the build tree -- once now
+#    (so cppcheck/clang-tidy can run without a build) and again on EVERY build,
+#    write-if-different, so only fw_info.c recompiles and only on a real change.
+#    OBJECT library: nothing references the record at link time, and an
+#    archive member nobody references is never pulled into the .elf.
+find_package(Git QUIET)
+set(BUILD_INFO_HEADER ${CMAKE_BINARY_DIR}/generated/build_info.h)
+set(BUILD_INFO_ARGS
+        -DBI_SOURCE_DIR=${SRC_ROOT}
+        -DBI_OUTPUT=${BUILD_INFO_HEADER}
+        -DBI_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        "-DBI_TOOLCHAIN=${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}"
+        -DBI_GIT=${GIT_EXECUTABLE}
+        -P ${SRC_ROOT}/cmake/build_info.cmake)
+execute_process(COMMAND ${CMAKE_COMMAND} ${BUILD_INFO_ARGS})
+add_custom_target(build_info_gen
+        COMMAND ${CMAKE_COMMAND} ${BUILD_INFO_ARGS}
+        BYPRODUCTS ${BUILD_INFO_HEADER}
+        VERBATIM)
+add_library(fw_info OBJECT ${PROD}/services/fw_info.c)
+add_dependencies(fw_info build_info_gen)
+target_include_directories(fw_info
+        PUBLIC  ${PROD}/services
+        PRIVATE ${CMAKE_BINARY_DIR}/generated)
+target_link_libraries(fw_info
+        PUBLIC  interfaces sanitizers
+        PRIVATE warnings)
+# -- RTOS hooks (services layer, own target): configASSERT target, stack
+#    overflow / malloc-failed / idle hooks, idle+timer task memory. The kernel
+#    calls these by name, so freertos_kernel links them back (CMake repeats the
+#    static-library cycle on the link line): anything that links the kernel
+#    gets its hooks, and a missing hook can never be a late link error.
+add_library(rtos_hooks STATIC ${PROD}/services/rtos_hooks.c)
+target_include_directories(rtos_hooks PUBLIC ${PROD}/services)
+target_link_libraries(rtos_hooks
+        PUBLIC  interfaces freertos_kernel sanitizers
+        PRIVATE warnings)
+target_link_libraries(freertos_kernel INTERFACE rtos_hooks)
+
 # -- Drivers: fake sibling BUILDS everywhere (so it can't rot), but only
 #    LINKS into desktop/test binaries. can_fake.c and can_stm32.c define
 #    the same interface symbols by design; linking both into one image is
@@ -215,6 +258,7 @@ add_library(drivers_fake STATIC
         ${PROD}/drivers/adc_fake.c
         ${PROD}/drivers/can_fake.c
         ${PROD}/drivers/crash_record.c        # pure; shared with drivers_stm32
+        ${PROD}/drivers/fatal_fake.c
         ${PROD}/drivers/gpio_fake.c
         ${PROD}/drivers/pwm_fake.c
         ${PROD}/drivers/usart_fake.c
@@ -229,17 +273,25 @@ target_link_libraries(drivers_fake
 #    and the HAL is PRIVATE: its headers stop here, leaking to no one.
 if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
+            ${PROD}/drivers/adc_stm32.c
             ${PROD}/drivers/can_stm32.c
             ${PROD}/drivers/crash_record.c    # pure; also in drivers_fake for tests
             ${PROD}/drivers/fault_stm32.c
+            ${PROD}/drivers/fatal_stm32.c
             ${PROD}/drivers/gpio_stm32.c
+            ${PROD}/drivers/pwm_stm32.c
             ${PROD}/drivers/usart_stm32.c
+            ${PROD}/drivers/wdg_stm32.c
     )
     target_include_directories(drivers_stm32 PUBLIC ${PROD}/drivers)
     target_link_libraries(drivers_stm32
             PUBLIC  interfaces
             PRIVATE stm32_hal freertos_kernel warnings)
     # freertos PRIVATE: FromISR handoff only, per ARCHITECTURE.md.
+    # IWDG debug-freeze policy, chosen explicitly per build (issue #18):
+    # frozen under a halted debugger in Debug, running in every other config.
+    target_compile_definitions(drivers_stm32 PRIVATE
+            WDG_STM32_FREEZE_ON_DEBUG_HALT=$<IF:$<CONFIG:Debug>,1,0>)
 endif()
 
 # ============================================================================
@@ -264,7 +316,7 @@ if(PLATFORM_MCU)
             ${STARTUP_ASM}              # was missing: no startup = no boot
     )
     target_link_libraries(${PROJECT_NAME}.elf PRIVATE
-            services proto app
+            services proto app fw_info
             drivers_stm32               # drivers_fake deliberately NOT here
             freertos_kernel stm32_hal
             warnings
@@ -297,6 +349,22 @@ else()
     # the desktop build is itself a layering check.
     enable_testing()
     add_subdirectory(production/tests)   # was `tests` -- no such dir at root
+
+    # Desktop simulation (#52): the full task set on the POSIX port, every
+    # service wired to its *_fake driver. Runnable by hand
+    # (`build/desktop/monoboard_sim`, runs until killed) and as a bounded
+    # CTest smoke case that must start the scheduler and exit cleanly.
+    add_executable(monoboard_sim ${PROD}/src/main_desktop.c)
+    target_link_libraries(monoboard_sim PRIVATE
+            services proto app
+            drivers_fake                # drivers_stm32 deliberately NOT here
+            freertos_kernel
+            warnings)
+    add_test(NAME desktop_sim_smoke
+            COMMAND monoboard_sim --duration-ms 500)
+    set_tests_properties(desktop_sim_smoke PROPERTIES
+            TIMEOUT 30
+            PASS_REGULAR_EXPRESSION "SIM_RESULT status=pass")
 endif()
 
 # ============================================================================
@@ -312,6 +380,7 @@ file(GLOB_RECURSE FIRST_PARTY_SOURCES CONFIGURE_DEPENDS
         ${PROD}/tests/*.[ch]
         ${PROD}/tests/suites/*.[ch]
         ${PROD}/src/main_stm32.c
+        ${PROD}/src/main_desktop.c
 )
 # The rest of production/src/ is CubeMX-generated: excluded on purpose, it
 # will never pass BARR-C formatting. Move any hand-written code out of there.

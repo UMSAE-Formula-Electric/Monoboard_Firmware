@@ -8,6 +8,8 @@
  * onto the vector table's names, and fault_stm32.c owns the fault vectors.
  */
 #include "fault_stm32.h"
+#include "fatal_stm32.h"
+#include "rtos_hooks.h"
 
 /* Placeholder until build info (issue #49) provides the real version. */
 #define FW_VERSION_STRING "unversioned"
@@ -17,14 +19,17 @@
  * service (issue #23) exists to send it over the log sink and CAN. */
 static char boot_report[512] __attribute__((used));
 
+
 int main(void)
 {
-    /* First, before anything can reset again or overwrite RAM: latch the
-     * reset cause, pick up any crash dump, enable the fault handlers. */
+    /* First: from here on a configASSERT / stack overflow resets the MCU
+     * through fatal_stm32 instead of spinning until the watchdog bites. */
+    rtos_hooks_install(&fatal_stm32);
     fault_stm32_boot();
     (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), FW_VERSION_STRING);
 
     for (;;) {
+      
     }
 
     return 0;
