@@ -23,12 +23,23 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "SANITIZE": "ON"
       }
+    },
+    {
+      "name": "coverage",
+      "inherits": "desktop",
+      "displayName": "Desktop tests with gcov coverage (no sanitizers)",
+      "binaryDir": "${sourceDir}/build/coverage",
+      "cacheVariables": {
+        "SANITIZE": "OFF",
+        "COVERAGE": "ON"
+      }
     }
   ],
   "buildPresets": [
     { "name": "mcu-debug",   "configurePreset": "mcu-debug" },
     { "name": "mcu-release", "configurePreset": "mcu-release" },
-    { "name": "desktop",     "configurePreset": "desktop" }
+    { "name": "desktop",     "configurePreset": "desktop" },
+    { "name": "coverage",    "configurePreset": "coverage", "targets": ["coverage"] }
   ],
   "testPresets": [
     {
