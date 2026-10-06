@@ -141,6 +141,7 @@ if(PLATFORM_MCU)
     add_library(stm32_hal STATIC
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_gpio.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_iwdg.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_usart.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
@@ -233,12 +234,17 @@ if(PLATFORM_MCU)
             ${PROD}/drivers/gpio_stm32.c
             ${PROD}/drivers/pwm_stm32.c
             ${PROD}/drivers/usart_stm32.c
+            ${PROD}/drivers/wdg_stm32.c
     )
     target_include_directories(drivers_stm32 PUBLIC ${PROD}/drivers)
     target_link_libraries(drivers_stm32
             PUBLIC  interfaces
             PRIVATE stm32_hal freertos_kernel warnings)
     # freertos PRIVATE: FromISR handoff only, per ARCHITECTURE.md.
+    # IWDG debug-freeze policy, chosen explicitly per build (issue #18):
+    # frozen under a halted debugger in Debug, running in every other config.
+    target_compile_definitions(drivers_stm32 PRIVATE
+            WDG_STM32_FREEZE_ON_DEBUG_HALT=$<IF:$<CONFIG:Debug>,1,0>)
 endif()
 
 # ============================================================================
