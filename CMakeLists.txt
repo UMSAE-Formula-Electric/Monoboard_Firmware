@@ -230,6 +230,7 @@ if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/can_stm32.c
             ${PROD}/drivers/gpio_stm32.c
+            ${PROD}/drivers/pwm_stm32.c
             ${PROD}/drivers/usart_stm32.c
     )
     target_include_directories(drivers_stm32 PUBLIC ${PROD}/drivers)
