@@ -11,7 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define TEST_MAX_CASES    128U
+#define TEST_MAX_CASES    255U
 #define TEST_MAX_FAILURES 32U
 
 typedef struct {
