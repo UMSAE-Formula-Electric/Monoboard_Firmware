@@ -40,10 +40,14 @@ extern uint32_t SystemCoreClock;
 #define configSUPPORT_STATIC_ALLOCATION           1
 #define configSUPPORT_DYNAMIC_ALLOCATION          0
 
-#define configUSE_IDLE_HOOK                      0
+/* Hooks (issue #46) -- implemented in production/services/rtos_hooks.c.
+ * Tick hook stays off: it runs in the SysTick ISR at 1 kHz and nothing
+ * needs per-tick work yet. Stack check method 2 = pointer check plus the
+ * 16-byte fill-pattern check at the stack limit, run on every switch-out. */
+#define configUSE_IDLE_HOOK                      1
 #define configUSE_TICK_HOOK                      0
 #define configCHECK_FOR_STACK_OVERFLOW            2
-#define configUSE_MALLOC_FAILED_HOOK              0
+#define configUSE_MALLOC_FAILED_HOOK              1
 #define configUSE_DAEMON_TASK_STARTUP_HOOK        0
 #define configUSE_TRACE_FACILITY                  0
 #define configUSE_STATS_FORMATTING_FUNCTIONS      0
@@ -85,12 +89,22 @@ extern uint32_t SystemCoreClock;
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY \
     (configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY << (8 - configPRIO_BITS))
 
+/* configASSERT -> rtos_assert_failed() (production/services/rtos_hooks.c):
+ * interrupts off, file/line recorded, then the installed FatalIf resets
+ * the MCU (or breakpoints under a debugger). Policy: ARCHITECTURE.md,
+ * "Fatal errors". Being defined also turns on the port's interrupt
+ * priority checks, so a non-FromISR API called from an ISR, or an ISR
+ * above configMAX_SYSCALL_INTERRUPT_PRIORITY, asserts instead of
+ * corrupting the kernel. */
+#ifndef __IASMARM__
+void rtos_assert_failed(const char *file, int line) __attribute__((noreturn));
+#endif
 #define configASSERT(x) \
-    if ((x) == 0) { \
-        taskDISABLE_INTERRUPTS(); \
-        for (;;) { \
+    do { \
+        if ((x) == 0) { \
+            rtos_assert_failed(__FILE__, __LINE__); \
         } \
-    }
+    } while (0)
 
 /* There is no stm32f4xx_it.c: the vector table in startup_stm32f446xx.s
  * names these three handlers, and the ARM_CM4F port defines them under

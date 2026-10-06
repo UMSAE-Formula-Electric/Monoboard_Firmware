@@ -141,6 +141,7 @@ if(PLATFORM_MCU)
     add_library(stm32_hal STATIC
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_gpio.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_iwdg.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_usart.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
@@ -169,6 +170,7 @@ add_library(interfaces INTERFACE
         production/interfaces/adc_if.h
         production/interfaces/build_info_types.h
         production/interfaces/can_if.h
+        production/interfaces/fatal_if.h
         production/interfaces/gpio_if.h
         production/interfaces/pwm_if.h
         production/interfaces/uart_if.h
@@ -235,6 +237,17 @@ target_include_directories(fw_info
 target_link_libraries(fw_info
         PUBLIC  interfaces sanitizers
         PRIVATE warnings)
+# -- RTOS hooks (services layer, own target): configASSERT target, stack
+#    overflow / malloc-failed / idle hooks, idle+timer task memory. The kernel
+#    calls these by name, so freertos_kernel links them back (CMake repeats the
+#    static-library cycle on the link line): anything that links the kernel
+#    gets its hooks, and a missing hook can never be a late link error.
+add_library(rtos_hooks STATIC ${PROD}/services/rtos_hooks.c)
+target_include_directories(rtos_hooks PUBLIC ${PROD}/services)
+target_link_libraries(rtos_hooks
+        PUBLIC  interfaces freertos_kernel sanitizers
+        PRIVATE warnings)
+target_link_libraries(freertos_kernel INTERFACE rtos_hooks)
 
 # -- Drivers: fake sibling BUILDS everywhere (so it can't rot), but only
 #    LINKS into desktop/test binaries. can_fake.c and can_stm32.c define
@@ -244,6 +257,7 @@ target_link_libraries(fw_info
 add_library(drivers_fake STATIC
         ${PROD}/drivers/adc_fake.c
         ${PROD}/drivers/can_fake.c
+        ${PROD}/drivers/fatal_fake.c
         ${PROD}/drivers/gpio_fake.c
         ${PROD}/drivers/pwm_fake.c
         ${PROD}/drivers/usart_fake.c
@@ -258,15 +272,23 @@ target_link_libraries(drivers_fake
 #    and the HAL is PRIVATE: its headers stop here, leaking to no one.
 if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
+            ${PROD}/drivers/adc_stm32.c
             ${PROD}/drivers/can_stm32.c
+            ${PROD}/drivers/fatal_stm32.c
             ${PROD}/drivers/gpio_stm32.c
+            ${PROD}/drivers/pwm_stm32.c
             ${PROD}/drivers/usart_stm32.c
+            ${PROD}/drivers/wdg_stm32.c
     )
     target_include_directories(drivers_stm32 PUBLIC ${PROD}/drivers)
     target_link_libraries(drivers_stm32
             PUBLIC  interfaces
             PRIVATE stm32_hal freertos_kernel warnings)
     # freertos PRIVATE: FromISR handoff only, per ARCHITECTURE.md.
+    # IWDG debug-freeze policy, chosen explicitly per build (issue #18):
+    # frozen under a halted debugger in Debug, running in every other config.
+    target_compile_definitions(drivers_stm32 PRIVATE
+            WDG_STM32_FREEZE_ON_DEBUG_HALT=$<IF:$<CONFIG:Debug>,1,0>)
 endif()
 
 # ============================================================================
