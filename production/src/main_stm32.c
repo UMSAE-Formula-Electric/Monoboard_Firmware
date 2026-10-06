@@ -7,8 +7,8 @@
  * stm32f4xx_it.c: FreeRTOSConfig.h renames the ARM_CM4F port's handlers
  * onto the vector table's names, and fault_stm32.c owns the fault vectors.
  */
-#include "fault_stm32.h"
 #include "fatal_stm32.h"
+#include "fault_stm32.h"
 #include "rtos_hooks.h"
 
 /* Placeholder until build info (issue #49) provides the real version. */
@@ -29,7 +29,6 @@ int main(void)
     (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), FW_VERSION_STRING);
 
     for (;;) {
-      
     }
 
     return 0;
