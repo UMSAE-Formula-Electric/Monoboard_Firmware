@@ -169,6 +169,7 @@ add_library(interfaces INTERFACE
         production/interfaces/if_status.h
         production/interfaces/adc_if.h
         production/interfaces/can_if.h
+        production/interfaces/fatal_if.h
         production/interfaces/gpio_if.h
         production/interfaces/pwm_if.h
         production/interfaces/uart_if.h
@@ -207,6 +208,18 @@ target_link_libraries(services
 # If someone adds `#include "can_stm32.h"` to a service: not on the
 # include path -> compile error. That IS the architecture review.
 
+# -- RTOS hooks (services layer, own target): configASSERT target, stack
+#    overflow / malloc-failed / idle hooks, idle+timer task memory. The kernel
+#    calls these by name, so freertos_kernel links them back (CMake repeats the
+#    static-library cycle on the link line): anything that links the kernel
+#    gets its hooks, and a missing hook can never be a late link error.
+add_library(rtos_hooks STATIC ${PROD}/services/rtos_hooks.c)
+target_include_directories(rtos_hooks PUBLIC ${PROD}/services)
+target_link_libraries(rtos_hooks
+        PUBLIC  interfaces freertos_kernel sanitizers
+        PRIVATE warnings)
+target_link_libraries(freertos_kernel INTERFACE rtos_hooks)
+
 # -- Drivers: fake sibling BUILDS everywhere (so it can't rot), but only
 #    LINKS into desktop/test binaries. can_fake.c and can_stm32.c define
 #    the same interface symbols by design; linking both into one image is
@@ -215,6 +228,7 @@ target_link_libraries(services
 add_library(drivers_fake STATIC
         ${PROD}/drivers/adc_fake.c
         ${PROD}/drivers/can_fake.c
+        ${PROD}/drivers/fatal_fake.c
         ${PROD}/drivers/gpio_fake.c
         ${PROD}/drivers/pwm_fake.c
         ${PROD}/drivers/usart_fake.c
@@ -231,6 +245,7 @@ if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/adc_stm32.c
             ${PROD}/drivers/can_stm32.c
+            ${PROD}/drivers/fatal_stm32.c
             ${PROD}/drivers/gpio_stm32.c
             ${PROD}/drivers/pwm_stm32.c
             ${PROD}/drivers/usart_stm32.c
