@@ -76,6 +76,17 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
+  /* Firmware identity record (BuildInfo, issue #49 -- not CubeMX output:
+     re-apply if this file is regenerated). Pinned straight after the vector
+     table so it sits at a fixed, early offset in every image, and KEPT
+     because nothing references it at link time. */
+  .build_info :
+  {
+    . = ALIGN(4);
+    KEEP(*(.build_info))
+    . = ALIGN(4);
+  } >FLASH
+
   /* The program code and other data goes into FLASH */
   .text :
   {
@@ -224,6 +235,17 @@ SECTIONS
 
   PROVIDE( __bss_start = __tbss_start );
   PROVIDE( __bss_size = __bss_end - __bss_start );
+
+  /* No-init RAM (issue #45): survives a warm reset. Outside _sbss.._ebss so
+   * the startup code never zeroes it, and NOLOAD so it is never loaded from
+   * flash -- contents are whatever the previous run left. Holds the crash
+   * record (fault_stm32.c), validated by magic + CRC before use. */
+  .noinit (NOLOAD) : ALIGN(4)
+  {
+    *(.noinit)
+    *(.noinit.*)
+    . = ALIGN(4);
+  } >RAM
 
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack (NOLOAD) :

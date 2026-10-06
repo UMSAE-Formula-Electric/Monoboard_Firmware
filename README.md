@@ -72,6 +72,14 @@ Open `build/coverage/coverage/index.html` for the per-line view (`cobertura.xml`
 The terminal table is per area (`production/app`, `proto`, `services`); the headline excludes the driver fakes,
 and FreeRTOS (`lib/`), CubeMX/HAL (`production/cubemx/`), tests and the `*_stm32.c` drivers are never measured.
 CI runs the same thing on every PR and puts the table, with the delta against the base branch, in the job summary.
+## Desktop simulation
+The same build also produces `build/desktop/monoboard_sim`. It runs the firmware's task set on the FreeRTOS POSIX
+port with the fake drivers, so you can debug it with gdb and ASan on your laptop:
+```
+./build/desktop/monoboard_sim                    # runs until Ctrl-C
+./build/desktop/monoboard_sim --duration-ms 5000 # ends the scheduler after 5 s and exits
+```
+CTest runs a short version as `desktop_sim_smoke`. Tasks run as host threads, so timing numbers from it mean nothing.
 
 # Hardware
 Currently this project is targeted to build for the stm32f446VET microcontroller. Making use of the chips CAN,USART,DMA
