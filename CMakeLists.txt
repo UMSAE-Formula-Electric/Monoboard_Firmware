@@ -168,6 +168,7 @@ endif()
 add_library(interfaces INTERFACE
         production/interfaces/if_status.h
         production/interfaces/adc_if.h
+        production/interfaces/build_info_types.h
         production/interfaces/can_if.h
         production/interfaces/fatal_if.h
         production/interfaces/gpio_if.h
@@ -208,6 +209,34 @@ target_link_libraries(services
 # If someone adds `#include "can_stm32.h"` to a service: not on the
 # include path -> compile error. That IS the architecture review.
 
+# -- Build info (issue #49): git/toolchain identity embedded in every image. --
+#    cmake/build_info.cmake writes build_info.h into the build tree -- once now
+#    (so cppcheck/clang-tidy can run without a build) and again on EVERY build,
+#    write-if-different, so only fw_info.c recompiles and only on a real change.
+#    OBJECT library: nothing references the record at link time, and an
+#    archive member nobody references is never pulled into the .elf.
+find_package(Git QUIET)
+set(BUILD_INFO_HEADER ${CMAKE_BINARY_DIR}/generated/build_info.h)
+set(BUILD_INFO_ARGS
+        -DBI_SOURCE_DIR=${SRC_ROOT}
+        -DBI_OUTPUT=${BUILD_INFO_HEADER}
+        -DBI_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        "-DBI_TOOLCHAIN=${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}"
+        -DBI_GIT=${GIT_EXECUTABLE}
+        -P ${SRC_ROOT}/cmake/build_info.cmake)
+execute_process(COMMAND ${CMAKE_COMMAND} ${BUILD_INFO_ARGS})
+add_custom_target(build_info_gen
+        COMMAND ${CMAKE_COMMAND} ${BUILD_INFO_ARGS}
+        BYPRODUCTS ${BUILD_INFO_HEADER}
+        VERBATIM)
+add_library(fw_info OBJECT ${PROD}/services/fw_info.c)
+add_dependencies(fw_info build_info_gen)
+target_include_directories(fw_info
+        PUBLIC  ${PROD}/services
+        PRIVATE ${CMAKE_BINARY_DIR}/generated)
+target_link_libraries(fw_info
+        PUBLIC  interfaces sanitizers
+        PRIVATE warnings)
 # -- RTOS hooks (services layer, own target): configASSERT target, stack
 #    overflow / malloc-failed / idle hooks, idle+timer task memory. The kernel
 #    calls these by name, so freertos_kernel links them back (CMake repeats the
@@ -284,7 +313,7 @@ if(PLATFORM_MCU)
             ${STARTUP_ASM}              # was missing: no startup = no boot
     )
     target_link_libraries(${PROJECT_NAME}.elf PRIVATE
-            services proto app
+            services proto app fw_info
             drivers_stm32               # drivers_fake deliberately NOT here
             freertos_kernel stm32_hal
             warnings
