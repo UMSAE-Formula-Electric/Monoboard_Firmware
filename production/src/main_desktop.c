@@ -214,14 +214,6 @@ static bool sim_parse_args(int argc, char **argv)
  * Desktop-only and deliberately minimal; the shared hook set is #46.
  * ---------------------------------------------------------------------- */
 
-/* Prototype comes from task.h; the non-const `name` is FreeRTOS's signature. */
-/* cppcheck-suppress constParameterPointer */
-void vApplicationStackOverflowHook(TaskHandle_t task, char *name)
-{
-    (void)task;
-    (void)fprintf(stderr, "[sim] FATAL: stack overflow in task '%s'\n", name);
-    abort();
-}
 
 int main(int argc, char **argv)
 {

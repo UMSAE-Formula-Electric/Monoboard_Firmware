@@ -257,6 +257,7 @@ target_link_libraries(freertos_kernel INTERFACE rtos_hooks)
 add_library(drivers_fake STATIC
         ${PROD}/drivers/adc_fake.c
         ${PROD}/drivers/can_fake.c
+        ${PROD}/drivers/crash_record.c        # pure; shared with drivers_stm32
         ${PROD}/drivers/fatal_fake.c
         ${PROD}/drivers/gpio_fake.c
         ${PROD}/drivers/pwm_fake.c
@@ -274,6 +275,8 @@ if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/adc_stm32.c
             ${PROD}/drivers/can_stm32.c
+            ${PROD}/drivers/crash_record.c    # pure; also in drivers_fake for tests
+            ${PROD}/drivers/fault_stm32.c
             ${PROD}/drivers/fatal_stm32.c
             ${PROD}/drivers/gpio_stm32.c
             ${PROD}/drivers/pwm_stm32.c
