@@ -48,5 +48,10 @@ uint32_t now_us_isr(void)
 
 bool deadline_passed(uint32_t start, uint32_t timeout_ms)
 {
-    return (uint32_t)(now_ms() - start) > timeout_ms;
+    return deadline_passed_at(now_ms(), start, timeout_ms);
+}
+
+bool deadline_passed_at(uint32_t now, uint32_t start, uint32_t timeout_ms)
+{
+    return (uint32_t)(now - start) > timeout_ms;
 }

@@ -101,6 +101,20 @@ uint32_t now_us_isr(void);
  */
 bool deadline_passed(uint32_t start, uint32_t timeout_ms);
 
+/**
+ * Test a millisecond deadline using an explicitly supplied current timestamp.
+ *
+ * This pure form is useful when a caller already has a timestamp and for
+ * deterministic tests of counter wraparound. It uses the same strict
+ * greater-than semantics as deadline_passed().
+ *
+ * @param now         current monotonic timestamp
+ * @param start       timestamp at which the interval began
+ * @param timeout_ms  allowed elapsed time in milliseconds
+ * @return true if more than @p timeout_ms has elapsed, otherwise false
+ */
+bool deadline_passed_at(uint32_t now, uint32_t start, uint32_t timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif
