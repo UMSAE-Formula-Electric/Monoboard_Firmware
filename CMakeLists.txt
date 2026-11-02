@@ -285,6 +285,7 @@ target_link_libraries(drivers_fake
         PRIVATE warnings)
 if(NOT PLATFORM_MCU)
     target_sources(drivers_fake PRIVATE ${PROD}/drivers/time_desktop.c)
+    target_compile_definitions(drivers_fake PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
 
 # -- Drivers: real. The ONLY first-party target that can see the HAL, --------

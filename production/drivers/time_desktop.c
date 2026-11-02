@@ -2,8 +2,6 @@
  * @file time_desktop.c
  * @brief Desktop monotonic time implementation using CLOCK_MONOTONIC.
  */
-#define _POSIX_C_SOURCE 200809L
-
 #include "time_if.h"
 
 #include <time.h>
