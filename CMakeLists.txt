@@ -161,6 +161,7 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_rcc.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_cortex.c
+            ${VENDOR}/Core/Src/main.c
             ${VENDOR}/Core/Src/system_stm32f4xx.c
     )
     target_include_directories(stm32_hal PUBLIC
@@ -180,6 +181,7 @@ endif()
 # -- Interfaces: headers only; the one thing everyone may see. ---------------
 add_library(interfaces INTERFACE
         production/interfaces/if_status.h
+        production/interfaces/time_if.h
         production/interfaces/adc_if.h
         production/interfaces/build_info_types.h
         production/interfaces/can_if.h
@@ -281,6 +283,10 @@ target_include_directories(drivers_fake PUBLIC ${PROD}/drivers)
 target_link_libraries(drivers_fake
         PUBLIC  interfaces sanitizers
         PRIVATE warnings)
+if(NOT PLATFORM_MCU)
+    target_sources(drivers_fake PRIVATE ${PROD}/drivers/time_desktop.c)
+    target_compile_definitions(drivers_fake PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
 
 # -- Drivers: real. The ONLY first-party target that can see the HAL, --------
 #    and the HAL is PRIVATE: its headers stop here, leaking to no one.
@@ -293,6 +299,7 @@ if(PLATFORM_MCU)
             ${PROD}/drivers/fatal_stm32.c
             ${PROD}/drivers/gpio_stm32.c
             ${PROD}/drivers/pwm_stm32.c
+            ${PROD}/drivers/time_stm32.c
             ${PROD}/drivers/usart_stm32.c
             ${PROD}/drivers/wdg_stm32.c
     )

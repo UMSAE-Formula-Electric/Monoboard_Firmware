@@ -9,7 +9,11 @@
  */
 #include "fatal_stm32.h"
 #include "fault_stm32.h"
+#include "main.h"
 #include "rtos_hooks.h"
+#include "time_stm32.h"
+
+void SystemClock_Config(void);
 
 /* Placeholder until build info (issue #49) provides the real version. */
 #define FW_VERSION_STRING "unversioned"
@@ -22,6 +26,12 @@ static char boot_report[512] __attribute__((used));
 
 int main(void)
 {
+    HAL_Init();
+    SystemClock_Config();
+
+    /* The core clock is final now; now_us() only reads the enabled counter. */
+    time_stm32_init();
+
     /* First: from here on a configASSERT / stack overflow resets the MCU
      * through fatal_stm32 instead of spinning until the watchdog bites. */
     rtos_hooks_install(&fatal_stm32);
