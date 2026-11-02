@@ -2,8 +2,8 @@
  * @file time_stm32.c
  * @brief STM32 monotonic time implementation backed by the FreeRTOS tick.
  */
-#include "time_if.h"
 #include "time_stm32.h"
+#include "time_if.h"
 
 #include "FreeRTOS.h"
 #include "stm32f4xx.h"
