@@ -102,16 +102,18 @@ static const PeriodicTask imd_task        = {vIMDServiceStep, IMD_PERIOD_MS};
 static const PeriodicTask logging_task    = {vLoggingServiceStep, LOGGING_PERIOD_MS};
 static const PeriodicTask healthrun_task  = {vHealthrunServiceStep, HEALTHRUN_PERIOD_MS};
 
-/* Body shared by every periodic service. */
+/* Body shared by every periodic service. vTaskDelayUntil keeps the period
+ * fixed: the step's own run time does not stretch it. */
 /* cppcheck-suppress constParameterCallback ; signature fixed by TaskFunction_t */
 static void periodic_task(void *param)
 {
-    const PeriodicTask *task  = (const PeriodicTask *)param;
-    const TickType_t    delay = pdMS_TO_TICKS(task->period_ms);
+    const PeriodicTask *task      = (const PeriodicTask *)param;
+    const TickType_t    delay     = pdMS_TO_TICKS(task->period_ms);
+    TickType_t          last_wake = xTaskGetTickCount();
 
     for (;;) {
         task->step();
-        vTaskDelay(delay);
+        vTaskDelayUntil(&last_wake, delay);
     }
 }
 
