@@ -128,6 +128,7 @@ void HAL_USART_MspInit(USART_HandleTypeDef *husart)
  * HAL_USART_MspInit() set up -- NVIC, DMA, GPIO, and the peripheral clock.
  * @param husart  handle being de-initialised; ignored unless it is USART2
  */
+/* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_usart.h */
 void HAL_USART_MspDeInit(USART_HandleTypeDef *husart)
 {
     if (husart->Instance != USART2) {
@@ -185,6 +186,7 @@ static void stm32_start_next_tx_from_isr(BaseType_t *higher_priority_task_woken)
  * transfer, if any.
  * @param husart  handle that completed; ignored unless it is USART2
  */
+/* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_usart.h */
 void HAL_USART_TxCpltCallback(USART_HandleTypeDef *husart)
 {
     BaseType_t higher_priority_task_woken = pdFALSE;
@@ -214,6 +216,7 @@ void HAL_USART_TxCpltCallback(USART_HandleTypeDef *husart)
  * transfer instead of leaving TX wedged.
  * @param husart  handle that faulted; ignored unless it is USART2
  */
+/* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_usart.h */
 void HAL_USART_ErrorCallback(USART_HandleTypeDef *husart)
 {
     BaseType_t higher_priority_task_woken = pdFALSE;

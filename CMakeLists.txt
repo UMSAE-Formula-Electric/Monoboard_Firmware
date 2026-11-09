@@ -422,6 +422,7 @@ add_custom_target(cppcheck
         --suppress=missingIncludeSystem
         --suppress=unusedFunction
         --suppress=checkersReport
+        --suppress=normalCheckLevelMaxBranches
         --suppress=unmatchedSuppression
         --suppress=*:*cubemx*
         -D__GNUC__=13

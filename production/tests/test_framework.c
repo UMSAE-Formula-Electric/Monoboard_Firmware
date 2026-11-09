@@ -92,6 +92,7 @@ int test_run_all(const char *suite_filter)
         test_case->fn();
         ran++;
 
+        /* cppcheck-suppress knownConditionTrueFalse ; test_case->fn() updates it */
         if (g_failure_count == 0U) {
             printf("%s %s / %s\n", tag_pass(), test_case->suite, test_case->name);
             passed++;
