@@ -114,7 +114,7 @@
 /* Matches config/mcu/FreeRTOSConfig.h: ARCHITECTURE.md makes priorities.h
  * the single source of truth for task priorities, so this level count
  * must agree with the target build. */
-#define configMAX_PRIORITIES                       7
+#define configMAX_PRIORITIES                       8
 
 /* configMINIMAL_STACK_SIZE defines the size of the stack used by the Idle task
  * (in words, not in bytes!).  The kernel does not use this constant for any
