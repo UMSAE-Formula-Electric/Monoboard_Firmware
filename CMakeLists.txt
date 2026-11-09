@@ -159,6 +159,7 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim_ex.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_rcc.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_cortex.c
             ${VENDOR}/Core/Src/main.c
@@ -216,6 +217,7 @@ target_link_libraries(app
 add_library(services STATIC
         #services/<filename>.c
         ${PROD}/services/stub.c
+        ${PROD}/services/service_stubs.c
 )
 target_include_directories(services PUBLIC ${PROD}/services)
 target_link_libraries(services
@@ -333,6 +335,7 @@ if(PLATFORM_MCU)
 
     add_executable(${PROJECT_NAME}.elf
             ${PROD}/src/main_stm32.c
+            ${PROD}/src/rtos_system.c
             ${STARTUP_ASM}              # was missing: no startup = no boot
     )
     target_link_libraries(${PROJECT_NAME}.elf PRIVATE
@@ -374,7 +377,9 @@ else()
     # service wired to its *_fake driver. Runnable by hand
     # (`build/desktop/monoboard_sim`, runs until killed) and as a bounded
     # CTest smoke case that must start the scheduler and exit cleanly.
-    add_executable(monoboard_sim ${PROD}/src/main_desktop.c)
+    add_executable(monoboard_sim
+            ${PROD}/src/main_desktop.c
+            ${PROD}/src/rtos_system.c)
     target_link_libraries(monoboard_sim PRIVATE
             services proto app
             drivers_fake                # drivers_stm32 deliberately NOT here
@@ -401,6 +406,7 @@ file(GLOB_RECURSE FIRST_PARTY_SOURCES CONFIGURE_DEPENDS
         ${PROD}/tests/suites/*.[ch]
         ${PROD}/src/main_stm32.c
         ${PROD}/src/main_desktop.c
+        ${PROD}/src/rtos_system.[ch]
 )
 # The rest of production/src/ is CubeMX-generated: excluded on purpose, it
 # will never pass BARR-C formatting. Move any hand-written code out of there.
