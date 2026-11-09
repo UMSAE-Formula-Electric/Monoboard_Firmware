@@ -107,12 +107,13 @@ void rtos_assert_failed(const char *file, int line) __attribute__((noreturn));
     } while (0)
 
 /* There is no stm32f4xx_it.c: the vector table in startup_stm32f446xx.s
- * names these two handlers, and the ARM_CM4F port defines them under the
+ * names these three handlers, and the ARM_CM4F port defines them under the
  * vPort../xPort.. names below. Renaming here is what wires the port into
- * the vector table without a hand-written trampoline file. SysTick is not
- * renamed: main_stm32.c defines SysTick_Handler, which also drives the HAL
- * tick and holds off xPortSysTickHandler until the scheduler is running. */
+ * the vector table without a hand-written trampoline file. SysTick belongs
+ * to the kernel alone: the HAL tick runs from TIM10 (board_stm32.c), and
+ * the port only starts SysTick in vTaskStartScheduler(). */
 #define vPortSVCHandler     SVC_Handler
 #define xPortPendSVHandler  PendSV_Handler
+#define xPortSysTickHandler SysTick_Handler
 
 #endif /* FREERTOS_CONFIG_H */

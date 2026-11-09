@@ -7,29 +7,25 @@
  * and creates the shared tasks, so no service runs before its drivers do.
  * Log sink install lands here once that layer exists.
  *
- * No stm32f4xx_it.c: FreeRTOSConfig.h renames the ARM_CM4F port's SVC and
- * PendSV handlers onto the vector table's names, SysTick_Handler is below,
- * and fault_stm32.c owns the fault vectors.
+ * No stm32f4xx_it.c: FreeRTOSConfig.h renames the ARM_CM4F port's SVC,
+ * PendSV and SysTick handlers onto the vector table's names, board_stm32.c
+ * owns the TIM10 HAL-tick vector, and fault_stm32.c the fault vectors.
  */
 #include "FreeRTOS.h"
 #include "task.h"
 
 #include "adc_stm32.h"
+#include "board_stm32.h"
 #include "can_stm32.h"
 #include "fatal_stm32.h"
 #include "fault_stm32.h"
 #include "gpio_stm32.h"
-#include "main.h"
 #include "pwm_stm32.h"
 #include "rtos_hooks.h"
 #include "rtos_system.h"
 #include "time_stm32.h"
 #include "usart_stm32.h"
 #include "wdg_stm32.h"
-
-void SystemClock_Config(void);
-void SysTick_Handler(void);
-void xPortSysTickHandler(void); /* ARM_CM4F port.c; no public header */
 
 /* Highest application priority: nothing it creates can preempt it, so the
  * lower-priority services all start once it has deleted itself. The stack
@@ -58,18 +54,6 @@ static const RtosSystemDrivers stm32_drivers = {
 static StaticTask_t boot_task_tcb;
 static StackType_t  boot_task_stack[BOOT_TASK_STACK_WORDS];
 
-/* SysTick runs from HAL_Init() on, but the kernel's tick handler reads the
- * current task, so it must wait for the scheduler. The HAL needs its own tick
- * throughout: without it HAL timeouts never expire and a stuck peripheral
- * hangs instead of returning an error. */
-void SysTick_Handler(void)
-{
-    HAL_IncTick();
-    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED) {
-        xPortSysTickHandler();
-    }
-}
-
 /* Runs once, with interrupts live and the scheduler running, which driver
  * init needs: the HAL's timeouts count ticks.
  *
@@ -93,8 +77,7 @@ static void boot_task(void *param)
 
 int main(void)
 {
-    HAL_Init();
-    SystemClock_Config();
+    board_stm32_init();
 
     /* The core clock is final now; now_us() only reads the enabled counter. */
     time_stm32_init();
