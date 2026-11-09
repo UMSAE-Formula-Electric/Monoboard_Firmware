@@ -527,3 +527,17 @@ if(PLATFORM_MCU)
         message(STATUS "Python3 not found -- 'ioc-check' target unavailable")
     endif()
 endif()
+
+# The one target to run before pushing: everything CI gates a merge on, across
+# every build tree, whichever preset this is. See tools/check.py.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_custom_target(check
+            COMMAND ${Python3_EXECUTABLE} ${SRC_ROOT}/tools/check.py --cmake ${CMAKE_COMMAND}
+            WORKING_DIRECTORY ${SRC_ROOT}
+            COMMENT "Running all pre-push checks"
+            USES_TERMINAL
+            VERBATIM)
+else()
+    message(STATUS "Python3 not found -- 'check' target unavailable")
+endif()

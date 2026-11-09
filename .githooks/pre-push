@@ -1,0 +1,13 @@
+#!/bin/sh
+# Runs the same checks as the `check` target before every push.
+# Checks your working tree, including anything uncommitted.
+# Install once per clone:  git config core.hooksPath .githooks
+# Skip for one push:       git push --no-verify
+
+if command -v python3 >/dev/null 2>&1; then
+    python=python3
+else
+    python=python
+fi
+
+exec "$python" tools/check.py </dev/null

@@ -53,6 +53,23 @@ cmake --build --preset mcu-debug
 Swap `mcu-debug` for `mcu-release` or `desktop` as needed. In-source builds are disabled; always configure into
 `build/<preset>`.
 
+# Before you push
+Run the `check` target. It's the only one you need:
+```
+cmake --build build/desktop --target check
+```
+In CLion, pick `check` from the configuration list; it works from any preset. It runs formatting, the desktop build,
+unit tests, cppcheck on both the desktop and MCU builds, clang-tidy, `ioc-check`, both MCU builds and Doxygen. Every
+check runs even if an earlier one fails, and a PASS/FAIL summary prints at the end. On a fresh clone, run
+`cmake --preset desktop` first.
+
+To run it automatically on every `git push`, turn on the hook once per clone:
+```
+git config core.hooksPath .githooks
+```
+A failing check blocks the push. It checks your working tree, including anything uncommitted. To skip it for one
+push, use `git push --no-verify`.
+
 # Testing
 Desktop unit tests run through CTest:
 ```
