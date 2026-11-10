@@ -2,10 +2,10 @@
  * @file main_stm32.c
  * @brief Firmware composition root (see ARCHITECTURE.md).
  *
- * Selects the STM32 drivers for rtos_system.c, which owns the shared queues
- * and tasks, then starts the scheduler. The boot task brings the drivers up
- * and creates the shared tasks, so no service runs before its drivers do.
- * Log sink install lands here once that layer exists.
+ * Brings the board up, selects the STM32 drivers for rtos_system.c, which
+ * owns every queue and task (the boot service and its PC0 heartbeat among
+ * them), then starts the scheduler. Driver init runs in each service's task,
+ * not here. Log sink install lands here once that layer exists.
  *
  * No stm32f4xx_it.c: FreeRTOSConfig.h renames the ARM_CM4F port's SVC,
  * PendSV and SysTick handlers onto the vector table's names, board_stm32.c
@@ -27,12 +27,6 @@
 #include "usart_stm32.h"
 #include "wdg_stm32.h"
 
-/* Highest application priority: nothing it creates can preempt it, so the
- * lower-priority services all start once it has deleted itself. The stack
- * size is a PLACEHOLDER until #55 sets a measured value. */
-#define BOOT_TASK_PRIORITY    ((UBaseType_t)(configMAX_PRIORITIES - 2U))
-#define BOOT_TASK_STACK_WORDS 256U
-
 /* Placeholder until build info (issue #49) provides the real version. */
 #define FW_VERSION_STRING "unversioned"
 
@@ -51,30 +45,6 @@ static const RtosSystemDrivers stm32_drivers = {
     .wdg  = &wdg_stm32,
 };
 
-static StaticTask_t boot_task_tcb;
-static StackType_t  boot_task_stack[BOOT_TASK_STACK_WORDS];
-
-/* Runs once, with interrupts live and the scheduler running, which driver
- * init needs: the HAL's timeouts count ticks.
- *
- * SEAM: driver init goes first in this function, asserting on each result.
- * CAN and the UART wait on a confirmed bitrate and baud rate. The watchdog
- * waits on a service that kicks it (#38), and belongs in main() because its
- * init must run before the scheduler starts. */
-/* cppcheck-suppress constParameterCallback ; signature fixed by TaskFunction_t */
-static void boot_task(void *param)
-{
-    (void)param;
-
-    {
-        const bool created = rtos_system_create(&stm32_drivers);
-
-        configASSERT(created);
-    }
-
-    vTaskDelete(NULL);
-}
-
 int main(void)
 {
     board_stm32_init();
@@ -88,13 +58,11 @@ int main(void)
     fault_stm32_boot();
     (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), FW_VERSION_STRING);
 
-    {
-        const TaskHandle_t boot = xTaskCreateStatic(
-            boot_task, "boot", (configSTACK_DEPTH_TYPE)BOOT_TASK_STACK_WORDS, NULL,
-            BOOT_TASK_PRIORITY, boot_task_stack, &boot_task_tcb);
-
-        configASSERT(boot != NULL);
-    }
+    /* SEAM: watchdog init goes here once a service kicks it (#38): it must
+     * run before the scheduler starts. Every other driver is brought up by
+     * its service's init hook in rtos_system.c, inside the service's task. */
+    const bool created = rtos_system_create(&stm32_drivers);
+    configASSERT(created);
 
     vTaskStartScheduler();
 

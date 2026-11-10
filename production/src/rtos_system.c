@@ -8,15 +8,20 @@
  * fails if a target-only header gets included here.
  *
  * Executable-specific tasks stay in their own main (the sim's control and
- * probe tasks, the MCU's boot task).
+ * probe tasks).
  *
  * Adding a periodic service:
  *   1. Priority, period and stack: add XXX_* below.
- *   2. Storage: add a file-scope StaticTask_t and StackType_t array, plus a
- *      StaticQueue_t and item buffer for each queue it owns.
- *   3. Wiring: add a PeriodicTask below and an xTaskCreateStatic() call in
- *      rtos_system_create(). Create any queues at the top of that function,
- *      before the tasks using them.
+ *   2. Storage: add a file-scope StaticTask_t and StackType_t array, the
+ *      service's context struct, and a StaticQueue_t and item buffer for
+ *      each queue it owns.
+ *   3. Wiring: in rtos_system_create(), set the context's drivers (and
+ *      queues) from @p drivers, then add a PeriodicTask below pointing at
+ *      the context, and its xTaskCreateStatic() call. Create any queues at
+ *      the top of that function, before the tasks using them. If the
+ *      service needs its drivers brought up, give it an init hook returning
+ *      IfStatus (see boot_service_init()): hooks run in the task, with the
+ *      scheduler live, so HAL timeouts tick, and a failure asserts.
  */
 #include "rtos_system.h"
 
@@ -24,6 +29,7 @@
 #include <stdint.h>
 
 #include "FreeRTOS.h"
+#include "boot_service.h"
 #include "service_stubs.h"
 #include "task.h"
 
@@ -35,8 +41,13 @@
  * Priorities follow the starting order in #24. Equal priorities time-slice.
  * Periods come from #19 (pedal) and #20 (motor controller); the rest, and
  * every stack size, are PLACEHOLDERS until #24 and #55 set measured values.
+ *
+ * Boot sits at the highest application priority, so its init hook runs
+ * before any other service's first step, and its 500 ms heartbeat (a 1 Hz
+ * square wave on PC0) is never delayed by them.
  * ---------------------------------------------------------------------- */
 
+#define BOOT_PRIORITY       ((UBaseType_t)(configMAX_PRIORITIES - 2U))
 #define CAN_ROUTER_PRIORITY ((UBaseType_t)(tskIDLE_PRIORITY + 5U))
 #define PEDAL_PRIORITY      ((UBaseType_t)(tskIDLE_PRIORITY + 4U))
 #define MC_PRIORITY         ((UBaseType_t)(tskIDLE_PRIORITY + 3U))
@@ -52,6 +63,7 @@
 #define IMD_PERIOD_MS        100U
 #define LOGGING_PERIOD_MS    10U
 #define HEALTHRUN_PERIOD_MS  1000U
+#define BOOT_PERIOD_MS       500U
 
 #define CAN_ROUTER_STACK_WORDS 256U
 #define PEDAL_STACK_WORDS      256U
@@ -60,6 +72,7 @@
 #define IMD_STACK_WORDS        256U
 #define LOGGING_STACK_WORDS    256U
 #define HEALTHRUN_STACK_WORDS  256U
+#define BOOT_STACK_WORDS       256U
 
 /* -------------------------------------------------------------------------
  * Static storage
@@ -85,34 +98,87 @@ static StackType_t  logging_stack[LOGGING_STACK_WORDS];
 static StaticTask_t healthrun_tcb;
 static StackType_t  healthrun_stack[HEALTHRUN_STACK_WORDS];
 
+static StaticTask_t boot_tcb;
+static StackType_t  boot_stack[BOOT_STACK_WORDS];
+
+/* Service contexts. rtos_system_create() fills in each one's drivers (and,
+ * later, its queues) before creating the task that uses it. */
+static BootService boot_svc;
+
 /* -------------------------------------------------------------------------
  * Wiring
  * ---------------------------------------------------------------------- */
 
+/* A service's init and step take its context as void * so they slot in here
+ * directly, with no adapter per service.
+ *
+ * SEAM: CAN and the UART get init hooks like the boot service's, in the
+ * services that own them, once their bitrate and baud rate are confirmed;
+ * PWM once it has a channel plan. The ADC needs none (its service calls
+ * start_scan). */
 typedef struct {
-    void (*step)(void);
+    void *ctx;                   /* the service's context, handed to init and step */
+    IfStatus (*init)(void *ctx); /* once, in the task, before the first step; may be NULL */
+    void (*step)(void *ctx);
     uint32_t period_ms;
 } PeriodicTask;
 
-static const PeriodicTask can_router_task = {vCANRouterServiceStep, CAN_ROUTER_PERIOD_MS};
-static const PeriodicTask pedal_task      = {vPedalServiceStep, PEDAL_PERIOD_MS};
-static const PeriodicTask mc_task         = {vMotorcontrollerServiceStep, MC_PERIOD_MS};
-static const PeriodicTask bms_task        = {vBMSServiceStep, BMS_PERIOD_MS};
-static const PeriodicTask imd_task        = {vIMDServiceStep, IMD_PERIOD_MS};
-static const PeriodicTask logging_task    = {vLoggingServiceStep, LOGGING_PERIOD_MS};
-static const PeriodicTask healthrun_task  = {vHealthrunServiceStep, HEALTHRUN_PERIOD_MS};
+/* Stub services take no context yet: ctx and init stay NULL. */
+static const PeriodicTask can_router_task = {
+    .step      = vCANRouterServiceStep,
+    .period_ms = CAN_ROUTER_PERIOD_MS,
+};
+static const PeriodicTask pedal_task = {
+    .step      = vPedalServiceStep,
+    .period_ms = PEDAL_PERIOD_MS,
+};
+static const PeriodicTask mc_task = {
+    .step      = vMotorcontrollerServiceStep,
+    .period_ms = MC_PERIOD_MS,
+};
+static const PeriodicTask bms_task = {
+    .step      = vBMSServiceStep,
+    .period_ms = BMS_PERIOD_MS,
+};
+static const PeriodicTask imd_task = {
+    .step      = vIMDServiceStep,
+    .period_ms = IMD_PERIOD_MS,
+};
+static const PeriodicTask logging_task = {
+    .step      = vLoggingServiceStep,
+    .period_ms = LOGGING_PERIOD_MS,
+};
+static const PeriodicTask healthrun_task = {
+    .step      = vHealthrunServiceStep,
+    .period_ms = HEALTHRUN_PERIOD_MS,
+};
+static const PeriodicTask boot_task = {
+    .ctx       = &boot_svc,
+    .init      = boot_service_init,
+    .step      = vBootServiceStep,
+    .period_ms = BOOT_PERIOD_MS,
+};
 
 /* Body shared by every periodic service. vTaskDelayUntil keeps the period
  * fixed: the step's own run time does not stretch it. */
 /* cppcheck-suppress constParameterCallback ; signature fixed by TaskFunction_t */
 static void periodic_task(void *param)
 {
-    const PeriodicTask *task      = (const PeriodicTask *)param;
-    const TickType_t    delay     = pdMS_TO_TICKS(task->period_ms);
-    TickType_t          last_wake = xTaskGetTickCount();
+    const PeriodicTask *task  = (const PeriodicTask *)param;
+    const TickType_t    delay = pdMS_TO_TICKS(task->period_ms);
+    TickType_t          last_wake;
 
+    /* A failed init is a wiring bug, not a runtime condition: assert (and
+     * reset the MCU) rather than run the service on a dead driver. */
+    if (task->init != NULL) {
+        const IfStatus status = task->init(task->ctx);
+
+        configASSERT(status == IF_OK);
+    }
+
+    last_wake = xTaskGetTickCount();
     for (;;) {
-        task->step();
+        task->step(task->ctx);
         vTaskDelayUntil(&last_wake, delay);
     }
 }
@@ -120,6 +186,15 @@ static void periodic_task(void *param)
 bool rtos_system_create(const RtosSystemDrivers *drivers)
 {
     if (drivers == NULL) {
+        return false;
+    }
+
+    /* Inject each service's drivers before its task can run. */
+    boot_svc.gpio = drivers->gpio;
+
+    if (xTaskCreateStatic(periodic_task, "boot", (configSTACK_DEPTH_TYPE)BOOT_STACK_WORDS,
+                          (void *)&boot_task, BOOT_PRIORITY, boot_stack, &boot_tcb)
+        == NULL) {
         return false;
     }
 

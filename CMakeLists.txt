@@ -218,6 +218,7 @@ target_link_libraries(app
 add_library(services STATIC
         #services/<filename>.c
         ${PROD}/services/stub.c
+        ${PROD}/services/boot_service.c
         ${PROD}/services/service_stubs.c
 )
 target_include_directories(services PUBLIC ${PROD}/services)

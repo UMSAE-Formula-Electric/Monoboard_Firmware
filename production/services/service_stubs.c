@@ -7,30 +7,37 @@
 
 #include "service_stubs.h"
 
-void vPedalServiceStep(void)
+void vPedalServiceStep(void *ctx)
 {
+    (void)ctx;
 }
 
-void vMotorcontrollerServiceStep(void)
+void vMotorcontrollerServiceStep(void *ctx)
 {
+    (void)ctx;
 }
 
-void vBMSServiceStep(void)
+void vBMSServiceStep(void *ctx)
 {
+    (void)ctx;
 }
 
-void vLoggingServiceStep(void)
+void vLoggingServiceStep(void *ctx)
 {
+    (void)ctx;
 }
 
-void vIMDServiceStep(void)
+void vIMDServiceStep(void *ctx)
 {
+    (void)ctx;
 }
 
-void vCANRouterServiceStep(void)
+void vCANRouterServiceStep(void *ctx)
 {
+    (void)ctx;
 }
 
-void vHealthrunServiceStep(void)
+void vHealthrunServiceStep(void *ctx)
 {
+    (void)ctx;
 }
