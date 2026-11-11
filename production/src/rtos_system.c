@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "FreeRTOS.h"
+#include "cli.h"
 #include "service_stubs.h"
 #include "task.h"
 
@@ -44,6 +45,7 @@
 #define IMD_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 2U))
 #define LOGGING_PRIORITY    ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 #define HEALTHRUN_PRIORITY  ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
+#define CLI_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 
 #define CAN_ROUTER_PERIOD_MS 5U
 #define PEDAL_PERIOD_MS      1U
@@ -52,6 +54,7 @@
 #define IMD_PERIOD_MS        100U
 #define LOGGING_PERIOD_MS    10U
 #define HEALTHRUN_PERIOD_MS  1000U
+#define CLI_PERIOD_MS        20U
 
 #define CAN_ROUTER_STACK_WORDS 256U
 #define PEDAL_STACK_WORDS      256U
@@ -60,6 +63,7 @@
 #define IMD_STACK_WORDS        256U
 #define LOGGING_STACK_WORDS    256U
 #define HEALTHRUN_STACK_WORDS  256U
+#define CLI_STACK_WORDS        512U /* handlers format text with vsnprintf */
 
 /* -------------------------------------------------------------------------
  * Static storage
@@ -85,6 +89,13 @@ static StackType_t  logging_stack[LOGGING_STACK_WORDS];
 static StaticTask_t healthrun_tcb;
 static StackType_t  healthrun_stack[HEALTHRUN_STACK_WORDS];
 
+static StaticTask_t cli_tcb;
+static StackType_t  cli_stack[CLI_STACK_WORDS];
+
+/* What the debug CLI may reach (issue #51). The gpio hook is filled in from
+ * the driver set in rtos_system_create(). */
+static CliPorts cli_ports;
+
 /* -------------------------------------------------------------------------
  * Wiring
  * ---------------------------------------------------------------------- */
@@ -101,6 +112,16 @@ static const PeriodicTask bms_task        = {vBMSServiceStep, BMS_PERIOD_MS};
 static const PeriodicTask imd_task        = {vIMDServiceStep, IMD_PERIOD_MS};
 static const PeriodicTask logging_task    = {vLoggingServiceStep, LOGGING_PERIOD_MS};
 static const PeriodicTask healthrun_task  = {vHealthrunServiceStep, HEALTHRUN_PERIOD_MS};
+static const PeriodicTask cli_task        = {vCliServiceStep, CLI_PERIOD_MS};
+
+/* Fail closed: nothing can tell the CLI that the vehicle is parked with the
+ * tractive system off until the vehicle state machine exists (#25), so every
+ * CLI write command is refused. Replace this with the state machine's query
+ * when #25 lands; do not make it return true to "unblock" a command. */
+static bool cli_is_safe_state(void)
+{
+    return false;
+}
 
 /* Body shared by every periodic service. */
 /* cppcheck-suppress constParameterCallback ; signature fixed by TaskFunction_t */
@@ -161,6 +182,17 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
     if (xTaskCreateStatic(periodic_task, "healthrun", (configSTACK_DEPTH_TYPE)HEALTHRUN_STACK_WORDS,
                           (void *)&healthrun_task, HEALTHRUN_PRIORITY, healthrun_stack,
                           &healthrun_tcb)
+        == NULL) {
+        return false;
+    }
+
+    cli_ports.is_safe_state = cli_is_safe_state;
+    cli_ports.gpio          = drivers->gpio;
+    if (!cli_init(drivers->uart, &cli_ports)) {
+        return false;
+    }
+    if (xTaskCreateStatic(periodic_task, "cli", (configSTACK_DEPTH_TYPE)CLI_STACK_WORDS,
+                          (void *)&cli_task, CLI_PRIORITY, cli_stack, &cli_tcb)
         == NULL) {
         return false;
     }

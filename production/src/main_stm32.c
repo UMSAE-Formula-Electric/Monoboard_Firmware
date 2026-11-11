@@ -16,8 +16,10 @@
 
 #include "adc_stm32.h"
 #include "can_stm32.h"
+#include "cli.h"
 #include "fatal_stm32.h"
 #include "fault_stm32.h"
+#include "fw_info.h"
 #include "gpio_stm32.h"
 #include "main.h"
 #include "pwm_stm32.h"
@@ -37,12 +39,14 @@ void xPortSysTickHandler(void); /* ARM_CM4F port.c; no public header */
 #define BOOT_TASK_PRIORITY    ((UBaseType_t)(configMAX_PRIORITIES - 2U))
 #define BOOT_TASK_STACK_WORDS 256U
 
-/* Placeholder until build info (issue #49) provides the real version. */
-#define FW_VERSION_STRING "unversioned"
+/* Debug CLI link (issue #51): USART2, the ST-LINK virtual COM port on a
+ * Nucleo. PLACEHOLDER baud rate until the team confirms one. */
+#define DEBUG_UART_BAUD_BPS 115200U
 
 /* Boot banner + crash dump from the previous run (issue #45). Kept in RAM
- * so it can be read with a debugger (`print boot_report`) until the logging
- * service (issue #23) exists to send it over the log sink and CAN. */
+ * so it can be read with a debugger (`print boot_report`) and by the debug
+ * CLI (`boot`), until the logging service (issue #23) exists to send it over
+ * the log sink and CAN. */
 static char boot_report[512] __attribute__((used));
 
 /* Driver selection: the one place the firmware names concrete drivers. */
@@ -83,6 +87,26 @@ static void boot_task(void *param)
     (void)param;
 
     {
+        const UartConfig uart_config = {
+            .baud_rate_bps = DEBUG_UART_BAUD_BPS,
+            .data_bits     = 8U,
+            .parity        = UART_IF_PARITY_NONE,
+            .stop_bits     = UART_STOP_BITS_1,
+        };
+        /* The pin the debug-only `set` command drives. */
+        const GpioConfig test_pin_config = {
+            .dir     = GPIO_DIR_OUTPUT,
+            .pull    = GPIO_PULL_NONE,
+            .initial = GPIO_LOW,
+        };
+        const IfStatus uart_status = usart_stm32.init(&uart_config);
+        const IfStatus gpio_status = gpio_stm32.init(GPIO_PIN_TEST, &test_pin_config);
+
+        configASSERT(uart_status == IF_OK);
+        configASSERT(gpio_status == IF_OK);
+    }
+
+    {
         const bool created = rtos_system_create(&stm32_drivers);
 
         configASSERT(created);
@@ -103,7 +127,8 @@ int main(void)
      * through fatal_stm32 instead of spinning until the watchdog bites. */
     rtos_hooks_install(&fatal_stm32);
     fault_stm32_boot();
-    (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), FW_VERSION_STRING);
+    (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), fw_info_get()->version);
+    cli_set_boot_report(boot_report);
 
     {
         const TaskHandle_t boot = xTaskCreateStatic(

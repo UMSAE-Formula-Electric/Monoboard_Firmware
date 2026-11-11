@@ -1,9 +1,9 @@
 /**
  * @file usart_stm32.h
- * @brief UartIf driver: implements uart_if on top of ST HAL's USART2
- * (HAL_USART_*). Wires USART2 to PA2 (TX) / PA3 (RX) / PA4 (CK), AF7, TX on
- * DMA1 Stream6 Channel4 -- see usart_stm32.c for the MSP/GPIO/DMA/NVIC setup
- * and the note on why this targets HAL_USART rather than HAL_UART.
+ * @brief UartIf driver: implements uart_if on top of ST HAL's USART2 in
+ * asynchronous mode (HAL_UART_*). Wires USART2 to PA2 (TX) / PA3 (RX), AF7,
+ * TX on DMA1 Stream6 Channel4, RX on DMA1 Stream5 Channel4 -- see
+ * usart_stm32.c for the MSP/GPIO/DMA/NVIC setup and the receive scheme.
  * Composition roots inject this in place of `usart_fake` to run on real
  * hardware.
  */

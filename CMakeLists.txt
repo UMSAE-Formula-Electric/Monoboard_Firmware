@@ -155,7 +155,7 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_gpio.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_iwdg.c
-            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_usart.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_uart.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim.c
@@ -218,6 +218,11 @@ add_library(services STATIC
         #services/<filename>.c
         ${PROD}/services/stub.c
         ${PROD}/services/service_stubs.c
+        ${PROD}/services/cli_core.c
+        ${PROD}/services/cli_commands.c
+        ${PROD}/services/cli.c
+        # Output-forcing CLI commands exist in Debug builds only (issue #51).
+        $<IF:$<CONFIG:Debug>,${PROD}/services/cli_commands_debug.c,${PROD}/services/cli_commands_debug_none.c>
 )
 target_include_directories(services PUBLIC ${PROD}/services)
 target_link_libraries(services
@@ -381,7 +386,7 @@ else()
             ${PROD}/src/main_desktop.c
             ${PROD}/src/rtos_system.c)
     target_link_libraries(monoboard_sim PRIVATE
-            services proto app
+            services proto app fw_info
             drivers_fake                # drivers_stm32 deliberately NOT here
             freertos_kernel
             warnings)

@@ -205,6 +205,21 @@ int main(int argc, char **argv)
 
     sim_reset_drivers();
 
+    {
+        /* The debug CLI talks on the UART; same frame format as the target. */
+        const UartConfig uart_config = {
+            .baud_rate_bps = 115200U,
+            .data_bits     = 8U,
+            .parity        = UART_IF_PARITY_NONE,
+            .stop_bits     = UART_STOP_BITS_1,
+        };
+
+        if (usart_fake.init(&uart_config) != IF_OK) {
+            (void)fprintf(stderr, "[sim] FATAL: uart init failed\n");
+            return 1;
+        }
+    }
+
     if (!rtos_system_create(&sim_drivers) || !sim_create_sim_tasks()) {
         (void)fprintf(stderr, "[sim] FATAL: task creation failed\n");
         return 1;
