@@ -159,10 +159,12 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim_ex.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_rcc.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_cortex.c
             ${VENDOR}/Core/Src/main.c
             ${VENDOR}/Core/Src/system_stm32f4xx.c
+            ${VENDOR}/Core/Src/stm32f4xx_hal_timebase_tim.c  # HAL tick on TIM10
     )
     target_include_directories(stm32_hal PUBLIC
             ${HAL_DRIVER_PATH}/Inc
@@ -216,6 +218,8 @@ target_link_libraries(app
 add_library(services STATIC
         #services/<filename>.c
         ${PROD}/services/stub.c
+        ${PROD}/services/boot_service.c
+        ${PROD}/services/service_stubs.c
 )
 target_include_directories(services PUBLIC ${PROD}/services)
 target_link_libraries(services
@@ -293,6 +297,7 @@ endif()
 if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/adc_stm32.c
+            ${PROD}/drivers/board_stm32.c
             ${PROD}/drivers/can_stm32.c
             ${PROD}/drivers/crash_record.c    # pure; also in drivers_fake for tests
             ${PROD}/drivers/fault_stm32.c
@@ -333,6 +338,7 @@ if(PLATFORM_MCU)
 
     add_executable(${PROJECT_NAME}.elf
             ${PROD}/src/main_stm32.c
+            ${PROD}/src/rtos_system.c
             ${STARTUP_ASM}              # was missing: no startup = no boot
     )
     target_link_libraries(${PROJECT_NAME}.elf PRIVATE
@@ -374,7 +380,9 @@ else()
     # service wired to its *_fake driver. Runnable by hand
     # (`build/desktop/monoboard_sim`, runs until killed) and as a bounded
     # CTest smoke case that must start the scheduler and exit cleanly.
-    add_executable(monoboard_sim ${PROD}/src/main_desktop.c)
+    add_executable(monoboard_sim
+            ${PROD}/src/main_desktop.c
+            ${PROD}/src/rtos_system.c)
     target_link_libraries(monoboard_sim PRIVATE
             services proto app
             drivers_fake                # drivers_stm32 deliberately NOT here
@@ -401,6 +409,7 @@ file(GLOB_RECURSE FIRST_PARTY_SOURCES CONFIGURE_DEPENDS
         ${PROD}/tests/suites/*.[ch]
         ${PROD}/src/main_stm32.c
         ${PROD}/src/main_desktop.c
+        ${PROD}/src/rtos_system.[ch]
 )
 # The rest of production/src/ is CubeMX-generated: excluded on purpose, it
 # will never pass BARR-C formatting. Move any hand-written code out of there.
@@ -422,6 +431,7 @@ add_custom_target(cppcheck
         --suppress=missingIncludeSystem
         --suppress=unusedFunction
         --suppress=checkersReport
+        --suppress=normalCheckLevelMaxBranches
         --suppress=unmatchedSuppression
         --suppress=*:*cubemx*
         -D__GNUC__=13
@@ -519,4 +529,18 @@ if(PLATFORM_MCU)
     else()
         message(STATUS "Python3 not found -- 'ioc-check' target unavailable")
     endif()
+endif()
+
+# The one target to run before pushing: everything CI gates a merge on, across
+# every build tree, whichever preset this is. See tools/check.py.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_custom_target(check
+            COMMAND ${Python3_EXECUTABLE} ${SRC_ROOT}/tools/check.py --cmake ${CMAKE_COMMAND}
+            WORKING_DIRECTORY ${SRC_ROOT}
+            COMMENT "Running all pre-push checks"
+            USES_TERMINAL
+            VERBATIM)
+else()
+    message(STATUS "Python3 not found -- 'check' target unavailable")
 endif()

@@ -3,12 +3,13 @@
 # Jobs (all independent, run in parallel):
 #   format          - clang-format --dry-run over the first-party sources
 #   host-test       - desktop preset: build + ctest, ASan/UBSan on
-#   static-analysis - cppcheck over the first-party translation units
+#   static-analysis - cppcheck over the first-party translation units (desktop)
 #   clang-tidy      - clang-tidy (static analyzer + bugprone/cert) over the same
 #   coverage        - coverage preset (gcov): per-area table + delta vs. the PR base
 #                     in the job summary, HTML report artifact. Non-blocking: it
 #                     fails only if the build or tests do, never on a percentage.
-#   mcu             - ioc-check, then cross-build mcu-debug + mcu-release, size report
+#   mcu             - ioc-check, then cross-build mcu-debug + mcu-release, cppcheck
+#                     over the *_stm32.c drivers, size report
 #   docs            - Doxygen (warnings are errors), html uploaded as an artifact
 #   pages           - publishes the Doxygen site (main only; needs Pages = "GitHub Actions")
 #
@@ -163,6 +164,11 @@ jobs:
         uses: carlosperate/arm-none-eabi-gcc-action@v1
         with:
           release: '13.3.Rel1'
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cppcheck
+          cppcheck --version
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -173,6 +179,8 @@ jobs:
         run: cmake --build build/mcu-debug --target ioc-check
       - name: Build mcu-debug
         run: cmake --build build/mcu-debug -j "$(nproc)"
+      - name: Run cppcheck (MCU sources)
+        run: cmake --build build/mcu-debug --target cppcheck
       - name: Configure + build mcu-release (LTO)
         run: |
           cmake --preset mcu-release -DCMAKE_C_COMPILER_LAUNCHER=ccache

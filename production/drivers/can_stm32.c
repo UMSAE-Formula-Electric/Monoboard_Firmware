@@ -46,6 +46,7 @@ static void stm32_configure_gpio_and_clock(void)
     HAL_GPIO_Init(GPIOA, &gpio_init);
 }
 
+/* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_can.h */
 void HAL_CAN_MspInit(CAN_HandleTypeDef *hcan)
 {
     if (hcan->Instance != CAN1) {
@@ -60,6 +61,7 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef *hcan)
     HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
 }
 
+/* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_can.h */
 void HAL_CAN_MspDeInit(CAN_HandleTypeDef *hcan)
 {
     if (hcan->Instance != CAN1) {

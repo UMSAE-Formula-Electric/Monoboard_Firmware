@@ -154,20 +154,28 @@ from service step functions; the application never runs "on its own."
 
 ---
 
-## Composition Root (`main_stm32.c`, `main_desktop.c`, test mains)
+## Composition Root (`main_stm32.c`, `main_desktop.c`, `rtos_system.c`, test mains)
 
-Not a layer — one file per executable, and the **only** code allowed to see
-everything.
+Not a layer — one main per executable, plus the shared `rtos_system.c`, and
+the **only** code allowed to see everything.
 
 **Responsibilities:**
 - Select and wire concrete drivers into services
   (`pedal_init(&adc_stm32)` vs `pedal_init(&adc_fake)`).
 - Create all queues and hand them into task contexts.
 - Create all tasks (`xTaskCreateStatic`), owning every **priority and
-  stack size** decision. All priorities are listed in a single
-  `priorities.h` so system schedulability is reviewable at a glance.
+  stack size** decision.
 - Install the active log sink.
 - Start the scheduler.
+
+`rtos_system.c` holds what the firmware and the desktop sim share: every
+queue, task, priority and stack size, in one file so system schedulability
+is reviewable at a glance and the two executables cannot drift apart. It is
+platform-neutral and receives drivers through `RtosSystemDrivers`. Each main
+keeps only what is specific to that executable: driver selection, scheduler
+start, and its own tasks (the sim's control and probe tasks). The boot
+service, which runs first and then drives the PC0 heartbeat, is a shared
+task like the rest.
 
 Different executables = different compositions, same layers:
 

@@ -123,14 +123,14 @@ TEST(usart_fake, completions_fire_in_fifo_order)
     completion_reset();
     CHECK(usart_fake.init(&config) == IF_OK);
 
-    CHECK(usart_fake.transmit(first, sizeof(first), on_complete, (void *)1) == IF_OK);
-    CHECK(usart_fake.transmit(second, sizeof(second), on_complete, (void *)2) == IF_OK);
+    CHECK(usart_fake.transmit(first, sizeof(first), on_complete, (void *)0x1) == IF_OK);
+    CHECK(usart_fake.transmit(second, sizeof(second), on_complete, (void *)0x2) == IF_OK);
 
     CHECK(usart_fake_complete_next_tx() == true);
-    CHECK(completion.last_ctx == (void *)1);
+    CHECK(completion.last_ctx == (void *)0x1);
 
     CHECK(usart_fake_complete_next_tx() == true);
-    CHECK(completion.last_ctx == (void *)2);
+    CHECK(completion.last_ctx == (void *)0x2);
 }
 
 TEST(usart_fake, transmit_returns_busy_when_pending_queue_full)

@@ -55,9 +55,9 @@ static uint32_t ram_start(void)
     return (uint32_t)SRAM1_BASE;
 }
 
-static uint32_t ram_end(void)
+static uintptr_t ram_end(void)
 {
-    return (uint32_t)&_estack;
+    return (uintptr_t)&_estack;
 }
 
 /* Name of the running task, or NULL before the scheduler starts (no

@@ -91,7 +91,7 @@
  * configUSE_TIME_SLICING to 0 to prevent the scheduler switching between Ready
  * state tasks just because there was a tick interrupt.  See
  * https://freertos.org/single-core-amp-smp-rtos-scheduling.html. */
-#define configUSE_TIME_SLICING                     0
+#define configUSE_TIME_SLICING                     1
 
 /* Set configUSE_PORT_OPTIMISED_TASK_SELECTION to 1 to select the next task to
  * run using an algorithm optimised to the instruction set of the target
@@ -114,7 +114,7 @@
 /* Matches config/mcu/FreeRTOSConfig.h: ARCHITECTURE.md makes priorities.h
  * the single source of truth for task priorities, so this level count
  * must agree with the target build. */
-#define configMAX_PRIORITIES                       7
+#define configMAX_PRIORITIES                       8
 
 /* configMINIMAL_STACK_SIZE defines the size of the stack used by the Idle task
  * (in words, not in bytes!).  The kernel does not use this constant for any
@@ -141,6 +141,8 @@
  *
  * Defining configTICK_TYPE_WIDTH_IN_BITS as TICK_TYPE_WIDTH_64_BITS causes
  * TickType_t to be defined (typedef'ed) as an unsigned 64-bit type. */
+/* Inert on the POSIX port: its portmacro.h fixes TickType_t as unsigned long,
+ * so ticks are wider here than the 32 bits on the target. */
 #define configTICK_TYPE_WIDTH_IN_BITS              TICK_TYPE_WIDTH_64_BITS
 
 /* Set configIDLE_SHOULD_YIELD to 1 to have the Idle task yield to an
@@ -153,17 +155,17 @@
  * configTASK_NOTIFICATION_ARRAY_ENTRIES sets the number of indexes in the
  * array. See https://www.freertos.org/RTOS-task-notifications.html  Defaults to
  * 1 if left undefined. */
-#define configTASK_NOTIFICATION_ARRAY_ENTRIES      1
+#define configTASK_NOTIFICATION_ARRAY_ENTRIES      3
 
 /* configQUEUE_REGISTRY_SIZE sets the maximum number of queues and semaphores
  * that can be referenced from the queue registry.  Only required when using a
  * kernel aware debugger.  Defaults to 0 if left undefined. */
-#define configQUEUE_REGISTRY_SIZE                  0
+#define configQUEUE_REGISTRY_SIZE                  8
 
 /* Set configENABLE_BACKWARD_COMPATIBILITY to 1 to map function names and
  * datatypes from old version of FreeRTOS to their latest equivalent.  Defaults
  * to 1 if left undefined. */
-#define configENABLE_BACKWARD_COMPATIBILITY        0
+#define configENABLE_BACKWARD_COMPATIBILITY        1
 
 /* Each task has its own array of pointers that can be used as thread local
  * storage.  configNUM_THREAD_LOCAL_STORAGE_POINTERS set the number of indexes
@@ -183,7 +185,7 @@
  * size of the task being created.  The same type is used to return information
  * about stack usage in various other API calls.  Defaults to size_t if left
  * undefined. */
-#define configSTACK_DEPTH_TYPE                     size_t
+#define configSTACK_DEPTH_TYPE                     uint16_t
 
 /* configMESSAGE_BUFFER_LENGTH_TYPE sets the type used to store the length of
  * each message written to a FreeRTOS message buffer (the length is also written
@@ -675,12 +677,14 @@ void rtos_assert_failed( const char * file,
 #define INCLUDE_vTaskDelay                     1
 #define INCLUDE_xTaskGetSchedulerState         1
 #define INCLUDE_xTaskGetCurrentTaskHandle      1
-#define INCLUDE_uxTaskGetStackHighWaterMark    0
-#define INCLUDE_xTaskGetIdleTaskHandle         0
-#define INCLUDE_eTaskGetState                  0
-#define INCLUDE_xTimerPendFunctionCall         0
-#define INCLUDE_xTaskAbortDelay                0
+#define INCLUDE_uxTaskGetStackHighWaterMark    1
+#define INCLUDE_xTaskGetIdleTaskHandle         1
+#define INCLUDE_eTaskGetState                  1
+#define INCLUDE_xTimerPendFunctionCall         1
+#define INCLUDE_xTaskAbortDelay                1
 #define INCLUDE_xTaskGetHandle                 0
 #define INCLUDE_xTaskResumeFromISR             1
+#define INCLUDE_xQueueGetMutexHolder           1
+#define INCLUDE_xSemaphoreGetMutexHolder       1
 
 #endif /* FREERTOS_CONFIG_H */

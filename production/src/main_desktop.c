@@ -29,9 +29,8 @@
  *
  * What is NOT here yet (seams marked below):
  *   - services: the service layer is still a stub (#32). Each service gets
- *     its init call + xTaskCreateStatic in sim_create_service_tasks(),
- *     injected with the fakes from sim_drivers.
- *   - priorities.h (#24): the two sim-only priorities below move there.
+ *     its init call + xTaskCreateStatic in rtos_system.c, shared with
+ *     main_stm32.c and injected with the fakes from sim_drivers.
  *   - scenario scripting / trace output: drive the fakes' test-control
  *     surfaces (can_fake_inject_rx, adc_fake_push_sample, ...) from a
  *     stimulus task once there are services to observe.
@@ -49,11 +48,12 @@
 #include "can_fake.h"
 #include "gpio_fake.h"
 #include "pwm_fake.h"
+#include "rtos_system.h"
 #include "usart_fake.h"
 #include "wdg_fake.h"
 
 /* -------------------------------------------------------------------------
- * Priorities and stacks. Sim-only tasks; move to priorities.h with #24.
+ * Priorities and stacks for the sim-only tasks. Shared tasks: rtos_system.c.
  * ---------------------------------------------------------------------- */
 
 /* Control task: highest application priority (below the timer daemon) so
@@ -75,16 +75,7 @@
  * Driver selection: the one place the desktop build names concrete drivers.
  * ---------------------------------------------------------------------- */
 
-typedef struct {
-    const AdcIf  *adc;
-    const CanIf  *can;
-    const GpioIf *gpio;
-    const PwmIf  *pwm;
-    const UartIf *uart;
-    const WdgIf  *wdg;
-} SimDrivers;
-
-static const SimDrivers sim_drivers = {
+static const RtosSystemDrivers sim_drivers = {
     .adc  = &adc_fake,
     .can  = &can_fake,
     .gpio = &gpio_fake,
@@ -161,16 +152,6 @@ static void sim_reset_drivers(void)
     wdg_fake_reset();
 }
 
-/* SEAM: service wiring. Each service lands here as
- *     xxx_init(&ctx, drivers->can, ...);
- *     xTaskCreateStatic(xxx_task, "xxx", XXX_STACK, &ctx, XXX_PRIO, ...);
- * with priorities/stacks from priorities.h. Nothing to wire yet (#32). */
-static bool sim_create_service_tasks(const SimDrivers *drivers)
-{
-    (void)drivers;
-    return true;
-}
-
 static bool sim_create_sim_tasks(void)
 {
     TaskHandle_t ctrl  = xTaskCreateStatic(sim_ctrl_task, "sim_ctrl", SIM_STACK_WORDS, NULL,
@@ -224,7 +205,7 @@ int main(int argc, char **argv)
 
     sim_reset_drivers();
 
-    if (!sim_create_service_tasks(&sim_drivers) || !sim_create_sim_tasks()) {
+    if (!rtos_system_create(&sim_drivers) || !sim_create_sim_tasks()) {
         (void)fprintf(stderr, "[sim] FATAL: task creation failed\n");
         return 1;
     }

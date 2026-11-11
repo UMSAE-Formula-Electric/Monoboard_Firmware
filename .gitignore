@@ -32,3 +32,15 @@ docs/fsae.tags
 .idea/
 .vscode/
 .claude/
+
+# OS metadata.
+.DS_Store
+Thumbs.db
+
+# Python bytecode (tools/, and the vendored FreeRTOS test scripts).
+__pycache__/
+*.py[cod]
+
+# graphify: local code-graph tool output and its config.
+graphify-out/
+.graphifyignore

@@ -413,8 +413,6 @@ static void capture_isr(PwmCaptureChannel channel)
 {
     CaptureState *cap   = &captures[channel];
     TIM_TypeDef  *timer = cap->htim.Instance;
-    uint32_t      period_ticks;
-    uint32_t      high_ticks;
 
     if ((timer->SR & TIM_SR_UIF) != 0U) {
         timer->SR   = ~TIM_SR_UIF; /* rc_w0: writing 1 elsewhere is a no-op */
@@ -422,9 +420,10 @@ static void capture_isr(PwmCaptureChannel channel)
         cap->primed = false;       /* next capture spans the wrap: aliased */
     }
     if ((timer->SR & TIM_SR_CC1IF) != 0U) {
-        period_ticks = timer->CCR1 & 0xFFFFU; /* reading CCR1 clears CC1IF */
-        high_ticks   = timer->CCR2 & 0xFFFFU;
-        timer->SR    = ~(TIM_SR_CC1OF | TIM_SR_CC2OF | TIM_SR_CC2IF);
+        uint32_t period_ticks = timer->CCR1 & 0xFFFFU; /* reading CCR1 clears CC1IF */
+        uint32_t high_ticks   = timer->CCR2 & 0xFFFFU;
+
+        timer->SR = ~(TIM_SR_CC1OF | TIM_SR_CC2OF | TIM_SR_CC2IF);
         if (!cap->primed) {
             cap->primed = true; /* first edge: period started at an unknown time */
         } else if ((period_ticks != 0U) && (high_ticks <= period_ticks)) {

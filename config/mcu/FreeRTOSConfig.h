@@ -18,7 +18,7 @@ extern uint32_t SystemCoreClock;
 #define configTICK_RATE_HZ                       ((TickType_t)1000)
 /* ARCHITECTURE.md: priorities.h is the single source of truth for task
  * priorities; keep this in sync with however many distinct levels it defines. */
-#define configMAX_PRIORITIES                     7
+#define configMAX_PRIORITIES                     8
 #define configMINIMAL_STACK_SIZE                 ((uint16_t)128)
 #define configMAX_TASK_NAME_LEN                  16
 #define configUSE_16_BIT_TICKS                   0
@@ -107,9 +107,11 @@ void rtos_assert_failed(const char *file, int line) __attribute__((noreturn));
     } while (0)
 
 /* There is no stm32f4xx_it.c: the vector table in startup_stm32f446xx.s
- * names these three handlers, and the ARM_CM4F port defines them under
- * the vPort../xPort.. names below. Renaming here is what wires the port
- * into the vector table without a hand-written trampoline file. */
+ * names these three handlers, and the ARM_CM4F port defines them under the
+ * vPort../xPort.. names below. Renaming here is what wires the port into
+ * the vector table without a hand-written trampoline file. SysTick belongs
+ * to the kernel alone: the HAL tick runs from TIM10 (board_stm32.c), and
+ * the port only starts SysTick in vTaskStartScheduler(). */
 #define vPortSVCHandler     SVC_Handler
 #define xPortPendSVHandler  PendSV_Handler
 #define xPortSysTickHandler SysTick_Handler
