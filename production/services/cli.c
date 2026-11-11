@@ -108,6 +108,22 @@ static void cli_feed_received(CliOut *out)
     }
 }
 
+IfStatus cli_service_init(void *ctx)
+{
+    const CliService *svc = ctx;
+    IfStatus          status;
+
+    if ((svc == NULL) || (svc->uart == NULL)) {
+        return IF_HW_FAULT;
+    }
+
+    status = svc->uart->init(&svc->uart_config);
+    if (status != IF_OK) {
+        return status;
+    }
+    return cli_init(svc->uart, &svc->ports) ? IF_OK : IF_HW_FAULT;
+}
+
 bool cli_init(const UartIf *uart, const CliPorts *ports)
 {
     if ((uart == NULL) || (ports == NULL) || (ports->is_safe_state == NULL)) {
@@ -147,10 +163,13 @@ void cli_set_boot_report(const char *text)
     cli_core_set_boot_report(&cli_core, text);
 }
 
-void vCliServiceStep(void)
+/* cppcheck-suppress constParameterPointer ; signature fixed by PeriodicTask.step */
+void vCliServiceStep(void *ctx)
 {
     CliOut out;
     size_t slot = 0U;
+
+    (void)ctx;
 
     if (cli_uart == NULL) {
         return; /* cli_init() has not run */

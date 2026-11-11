@@ -164,6 +164,7 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_cortex.c
             ${VENDOR}/Core/Src/main.c
             ${VENDOR}/Core/Src/system_stm32f4xx.c
+            ${VENDOR}/Core/Src/stm32f4xx_hal_timebase_tim.c  # HAL tick on TIM10
     )
     target_include_directories(stm32_hal PUBLIC
             ${HAL_DRIVER_PATH}/Inc
@@ -217,6 +218,7 @@ target_link_libraries(app
 add_library(services STATIC
         #services/<filename>.c
         ${PROD}/services/stub.c
+        ${PROD}/services/boot_service.c
         ${PROD}/services/service_stubs.c
         ${PROD}/services/cli_core.c
         ${PROD}/services/cli_commands.c
@@ -300,6 +302,7 @@ endif()
 if(PLATFORM_MCU)
     add_library(drivers_stm32 STATIC
             ${PROD}/drivers/adc_stm32.c
+            ${PROD}/drivers/board_stm32.c
             ${PROD}/drivers/can_stm32.c
             ${PROD}/drivers/crash_record.c    # pure; also in drivers_fake for tests
             ${PROD}/drivers/fault_stm32.c

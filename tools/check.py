@@ -24,8 +24,16 @@ MAKE_VARS = ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")
 
 def run(cmd):
     """Run one command from the repo root and return True if it succeeded."""
+    cmd = [str(part) for part in cmd]
     env = {key: value for key, value in os.environ.items() if key not in MAKE_VARS}
-    return subprocess.run([str(part) for part in cmd], cwd=ROOT, env=env).returncode == 0
+    try:
+        return subprocess.run(cmd, cwd=ROOT, env=env).returncode == 0
+    except FileNotFoundError:
+        print(f"{cmd[0]}: not found -- is it installed and on PATH?", flush=True)
+        return False
+    except OSError as err:
+        print(f"{cmd[0]}: could not run ({err})", flush=True)
+        return False
 
 
 def main():

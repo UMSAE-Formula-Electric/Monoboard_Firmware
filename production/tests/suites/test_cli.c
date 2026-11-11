@@ -75,36 +75,36 @@ TEST(cli, init_rejects_missing_arguments)
 TEST(cli, first_step_sends_boot_report_and_prompt)
 {
     CHECK(start("reset=POR\ncrash=none\n"));
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     CHECK(strcmp(sent(), "reset=POR\r\ncrash=none\r\nmb> ") == 0);
 
     /* Nothing typed: nothing more is sent. */
     finish_tx();
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     CHECK(usart_fake_tx_byte_count() == 0U);
 }
 
 TEST(cli, without_boot_report_first_step_sends_only_the_prompt)
 {
     CHECK(start(NULL));
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     CHECK(strcmp(sent(), "mb> ") == 0);
 }
 
 TEST(cli, typed_command_is_echoed_and_answered)
 {
     CHECK(start(NULL));
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     (void)sent();
 
     type("upt");
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     CHECK(strcmp(sent(), "upt") == 0);
 
     type("ime\r");
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     CHECK(strncmp(sent(), "ime\r\nuptime_ms=", 15U) == 0);
     CHECK(strstr(captured, "\r\nOK\r\nmb> ") != NULL);
@@ -113,15 +113,15 @@ TEST(cli, typed_command_is_echoed_and_answered)
 TEST(cli, one_command_line_per_step)
 {
     CHECK(start(NULL));
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     (void)sent();
 
     type("state\rcal\r");
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     CHECK(strcmp(sent(), "state\r\nERR unavailable: needs #25\r\nmb> ") == 0);
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     CHECK(strcmp(sent(), "cal\r\nERR unavailable: needs #61\r\nmb> ") == 0);
 }
@@ -129,34 +129,34 @@ TEST(cli, one_command_line_per_step)
 TEST(cli, waits_while_both_tx_buffers_are_with_the_driver)
 {
     CHECK(start(NULL));
-    vCliServiceStep(); /* prompt: buffer 0 busy */
+    vCliServiceStep(NULL); /* prompt: buffer 0 busy */
     type("state\r");
-    vCliServiceStep(); /* reply: buffer 1 busy */
+    vCliServiceStep(NULL); /* reply: buffer 1 busy */
     (void)sent();
 
     type("cal\r");
-    vCliServiceStep(); /* no free buffer: nothing sent, nothing lost */
+    vCliServiceStep(NULL); /* no free buffer: nothing sent, nothing lost */
     CHECK(usart_fake_tx_byte_count() == 0U);
 
     finish_tx();
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     CHECK(strcmp(sent(), "cal\r\nERR unavailable: needs #61\r\nmb> ") == 0);
 }
 
 TEST(cli, refused_transmit_is_counted_and_the_buffer_is_released)
 {
     CHECK(start(NULL));
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     (void)sent();
 
     usart_fake_force_busy();
     type("state\r");
-    vCliServiceStep(); /* reply dropped */
+    vCliServiceStep(NULL); /* reply dropped */
     CHECK(usart_fake_tx_byte_count() == 0U);
 
     type("health\r");
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     CHECK(strstr(sent(), "tx_dropped=1") != NULL);
 }
@@ -167,7 +167,7 @@ TEST(cli, receive_overflow_is_counted_not_fatal)
 
     (void)memset(noise, 'a', sizeof(noise));
     CHECK(start(NULL));
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     (void)sent();
 
@@ -177,15 +177,42 @@ TEST(cli, receive_overflow_is_counted_not_fatal)
     }
     /* Drain: the overlong line is discarded, then the CLI answers again. */
     for (size_t count = 0U; count < 40U; count++) {
-        vCliServiceStep();
+        vCliServiceStep(NULL);
         finish_tx();
         (void)sent();
     }
     type("\rhealth\r");
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     (void)sent();
-    vCliServiceStep();
+    vCliServiceStep(NULL);
     finish_tx();
     CHECK(strstr(sent(), "rx_dropped=128") != NULL);
+}
+
+TEST(cli, service_init_brings_up_the_uart_and_starts_the_cli)
+{
+    static CliService svc;
+
+    CHECK(cli_service_init(NULL) == IF_HW_FAULT);
+
+    usart_fake_reset();
+    svc.uart                      = &usart_fake;
+    svc.uart_config.baud_rate_bps = 115200U;
+    svc.uart_config.data_bits     = 8U;
+    svc.uart_config.parity        = UART_IF_PARITY_NONE;
+    svc.uart_config.stop_bits     = UART_STOP_BITS_1;
+    svc.ports                     = ports;
+    cli_set_boot_report(NULL);
+    CHECK(cli_service_init(&svc) == IF_OK);
+
+    vCliServiceStep(NULL);
+    CHECK(strcmp(sent(), "mb> ") == 0);
+
+    /* A UART that will not come up is reported, not hidden. */
+    svc.uart_config.baud_rate_bps = 0U;
+    CHECK(cli_service_init(&svc) == IF_HW_FAULT);
+
+    svc.uart = NULL;
+    CHECK(cli_service_init(&svc) == IF_HW_FAULT);
 }
