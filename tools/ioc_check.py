@@ -17,6 +17,10 @@ Naming contract:
     GpioPin enumerator     .ioc User Label     main.h macros
     ------------------      --------------      ------------
     GPIO_PIN_BRAKE_LIGHT -> BRAKE_LIGHT     -> BRAKE_LIGHT_Pin / BRAKE_LIGHT_GPIO_Port
+    GPIO_PIN_RTD_BTN_UC  -> RTD_BTN_uC      -> RTD_BTN_uC_Pin  / RTD_BTN_uC_GPIO_Port
+
+The enumerator is the label upper-cased; the main.h macros keep the label's
+own case, as CubeMX generates them.
 
 Checks:
   1. every GpioPin (except GPIO_PIN_COUNT) has a GPIO_Output/GPIO_Input pin with
@@ -59,9 +63,14 @@ def _note(msg: str) -> None:
     print(f"  [note] {msg}")
 
 
+def macro_label(raw: str) -> str:
+    """Match CubeMX's macro sanitisation: non-alphanumerics -> '_', case kept."""
+    return re.sub(r"[^0-9A-Za-z]+", "_", raw).strip("_")
+
+
 def normalize_label(raw: str) -> str:
-    """Match CubeMX's macro sanitisation: non-alphanumerics -> '_', upper-case."""
-    return re.sub(r"[^0-9A-Za-z]+", "_", raw).strip("_").upper()
+    """The GpioPin enumerator suffix for a User Label: the macro label, upper-cased."""
+    return macro_label(raw).upper()
 
 
 # --------------------------------------------------------------------------- #
@@ -201,14 +210,18 @@ def check_gpio(enumerators, pins, pin_map, main_defines, label_to_pad) -> bool:
             if pins[pad].get("Locked", "false").lower() != "true":
                 _note(f"{enum_name}: {pad} is not Locked in the .ioc -- a later change could steal it")
 
+        # CubeMX's macros keep the User Label's case (RTD_BTN_uC_Pin), so
+        # from here on use the label as written in the .ioc.
+        macro = macro_label(pins[pad]["GPIO_Label"]) if pad is not None else label
+
         # main.h generated defines
         if pad is not None:
-            missing = [f"{label}{s}" for s in ("_Pin", "_GPIO_Port") if f"{label}{s}" not in main_defines]
+            missing = [f"{macro}{s}" for s in ("_Pin", "_GPIO_Port") if f"{macro}{s}" not in main_defines]
             if missing:
                 _fail(f"{enum_name}: {', '.join(missing)} missing from main.h -- regenerate code from the .ioc")
                 ok = False
             else:
-                _ok(f"{enum_name}: main.h defines {label}_Pin / {label}_GPIO_Port")
+                _ok(f"{enum_name}: main.h defines {macro}_Pin / {macro}_GPIO_Port")
 
         # pin_map[] row
         body = pin_map.get(enum_name)
@@ -219,8 +232,8 @@ def check_gpio(enumerators, pins, pin_map, main_defines, label_to_pad) -> bool:
 
         # pin_map[] must use the generated macros, so a renamed/removed .ioc
         # pin breaks the compile instead of drifting silently.
-        if f"{label}_Pin" in body and f"{label}_GPIO_Port" in body:
-            _ok(f"{enum_name}: pin_map[] uses {label}_GPIO_Port / {label}_Pin")
+        if re.search(rf"\b{macro}_Pin\b", body) and re.search(rf"\b{macro}_GPIO_Port\b", body):
+            _ok(f"{enum_name}: pin_map[] uses {macro}_GPIO_Port / {macro}_Pin")
         else:
             detail = ""
             bit = _PIN_BIT_RE.search(body)
@@ -230,7 +243,7 @@ def check_gpio(enumerators, pins, pin_map, main_defines, label_to_pad) -> bool:
                 detail = f" (currently the literal {row_pad}"
                 detail += f", which also disagrees with the .ioc pad {pad})" if pad and row_pad != pad else ")"
             _fail(
-                f"{enum_name}: pin_map[] row must be {{{label}_GPIO_Port, {label}_Pin}} "
+                f"{enum_name}: pin_map[] row must be {{{macro}_GPIO_Port, {macro}_Pin}} "
                 f"from the generated main.h{detail}"
             )
             ok = False

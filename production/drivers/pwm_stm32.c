@@ -2,11 +2,10 @@
  * @file pwm_stm32.c
  * @brief pwm_if implementation for ST HAL's general-purpose timers.
  *
- * Wiring (provisional until issue #29, "Add pin definitions to IOC", puts
- * the timer pads in vendor.ioc -- change here, and only here, if they
- * move):
- *   - PWM_CH_TEST     -> TIM3_CH1, PA6, AF2 (output, safe level low)
- *   - PWM_CAP_CH_TEST -> TIM4_CH1, PB6, AF2 (input capture, pull-down)
+ * Wiring (matches the timer pads in vendor.ioc; change here, and only
+ * here, if they move):
+ *   - PWM_CH_TEST     -> TIM3_CH1, PB4 (DEBUG_LED_B), AF2 (output, safe level low)
+ *   - PWM_CAP_CH_TEST -> TIM4_CH2, PB7 (IMD_RESIST_uC), AF2 (input capture, pull-down)
  *
  * Output policy
  * -------------
@@ -43,10 +42,11 @@
  *
  * Input capture
  * -------------
- * PWM-input mode on one channel pair: TI1 rising edge -> IC1 (period) and
- * resets the counter via slave reset mode; TI1 falling edge -> IC2 (high
+ * PWM-input mode on one channel pair, driven from TI2 because the IMD
+ * signal lands on the timer's CH2 pad: TI2 rising edge -> IC2 (period) and
+ * resets the counter via slave reset mode; TI2 falling edge -> IC1 (high
  * time). The hardware latches both values every period on its own; the
- * CC1 ISR only copies the latched pair into one 32-bit word (atomic for the
+ * CC2 ISR only copies the latched pair into one 32-bit word (atomic for the
  * reader, no lock). No FreeRTOS call is made from the ISR, and nothing is
  * lost if a task runs late -- reads always see the latest complete period.
  *
@@ -120,14 +120,14 @@ typedef struct {
  * and why in this table's comment, and bump the _Static_assert.
  *   PWM_CH_TEST: bring-up channel, no load; frequency is caller's choice. */
 static const OutputMap output_map[PWM_CH_COUNT] = {
-    [PWM_CH_TEST] = {TIM3, TIM_CHANNEL_1, GPIOA, GPIO_PIN_6, GPIO_AF2_TIM3, false},
+    [PWM_CH_TEST] = {TIM3, TIM_CHANNEL_1, GPIOB, GPIO_PIN_4, GPIO_AF2_TIM3, false},
 };
 
 /* PwmCaptureChannel -> timer/pad. 100 kHz tick: 10 us resolution (0.05%
  * duty at 50 Hz) with a 655 ms silence window, covering the IMD's slowest
  * state with margin. Adding a channel also needs its TIMx_IRQHandler below. */
 static const CaptureMap capture_map[PWM_CAP_CH_COUNT] = {
-    [PWM_CAP_CH_TEST] = {TIM4, TIM4_IRQn, GPIOB, GPIO_PIN_6, GPIO_AF2_TIM4, 100000U},
+    [PWM_CAP_CH_TEST] = {TIM4, TIM4_IRQn, GPIOB, GPIO_PIN_7, GPIO_AF2_TIM4, 100000U},
 };
 
 _Static_assert(PWM_CH_COUNT == 1,
@@ -419,11 +419,11 @@ static void capture_isr(PwmCaptureChannel channel)
         cap->sample = 0U;          /* silence window expired: stale */
         cap->primed = false;       /* next capture spans the wrap: aliased */
     }
-    if ((timer->SR & TIM_SR_CC1IF) != 0U) {
-        uint32_t period_ticks = timer->CCR1 & 0xFFFFU; /* reading CCR1 clears CC1IF */
-        uint32_t high_ticks   = timer->CCR2 & 0xFFFFU;
+    if ((timer->SR & TIM_SR_CC2IF) != 0U) {
+        uint32_t period_ticks = timer->CCR2 & 0xFFFFU; /* reading CCR2 clears CC2IF */
+        uint32_t high_ticks   = timer->CCR1 & 0xFFFFU;
 
-        timer->SR = ~(TIM_SR_CC1OF | TIM_SR_CC2OF | TIM_SR_CC2IF);
+        timer->SR = ~(TIM_SR_CC1OF | TIM_SR_CC2OF | TIM_SR_CC1IF);
         if (!cap->primed) {
             cap->primed = true; /* first edge: period started at an unknown time */
         } else if ((period_ticks != 0U) && (high_ticks <= period_ticks)) {
@@ -447,8 +447,8 @@ void TIM4_IRQHandler(void)
 
 /**
  * @brief PwmIf::start_capture -- bring the timer up in PWM-input mode
- * (CH1 rising = period + counter reset, CH2 falling = high time) and arm
- * the CC1 and overflow interrupts.
+ * (CH2 rising = period + counter reset, CH1 falling = high time) and arm
+ * the CC2 and overflow interrupts.
  */
 static IfStatus stm32_start_capture(PwmCaptureChannel channel)
 {
@@ -489,17 +489,17 @@ static IfStatus stm32_start_capture(PwmCaptureChannel channel)
     ic.ICSelection = TIM_ICSELECTION_DIRECTTI;
     ic.ICPrescaler = TIM_ICPSC_DIV1;
     ic.ICFilter    = PWM_STM32_CAPTURE_FILTER;
-    if (HAL_TIM_IC_ConfigChannel(&cap->htim, &ic, TIM_CHANNEL_1) != HAL_OK) {
+    if (HAL_TIM_IC_ConfigChannel(&cap->htim, &ic, TIM_CHANNEL_2) != HAL_OK) {
         return IF_HW_FAULT;
     }
     ic.ICPolarity  = TIM_ICPOLARITY_FALLING;
     ic.ICSelection = TIM_ICSELECTION_INDIRECTTI;
-    if (HAL_TIM_IC_ConfigChannel(&cap->htim, &ic, TIM_CHANNEL_2) != HAL_OK) {
+    if (HAL_TIM_IC_ConfigChannel(&cap->htim, &ic, TIM_CHANNEL_1) != HAL_OK) {
         return IF_HW_FAULT;
     }
 
     slave.SlaveMode        = TIM_SLAVEMODE_RESET;
-    slave.InputTrigger     = TIM_TS_TI1FP1;
+    slave.InputTrigger     = TIM_TS_TI2FP2;
     slave.TriggerPolarity  = TIM_TRIGGERPOLARITY_RISING;
     slave.TriggerPrescaler = TIM_TRIGGERPRESCALER_DIV1;
     slave.TriggerFilter    = PWM_STM32_CAPTURE_FILTER;
@@ -522,8 +522,8 @@ static IfStatus stm32_start_capture(PwmCaptureChannel channel)
     HAL_NVIC_SetPriority(map->irq, PWM_STM32_IRQ_PRIORITY, 0U);
     HAL_NVIC_EnableIRQ(map->irq);
     __HAL_TIM_ENABLE_IT(&cap->htim, TIM_IT_UPDATE);
-    if ((HAL_TIM_IC_Start(&cap->htim, TIM_CHANNEL_2) != HAL_OK)
-        || (HAL_TIM_IC_Start_IT(&cap->htim, TIM_CHANNEL_1) != HAL_OK)) {
+    if ((HAL_TIM_IC_Start(&cap->htim, TIM_CHANNEL_1) != HAL_OK)
+        || (HAL_TIM_IC_Start_IT(&cap->htim, TIM_CHANNEL_2) != HAL_OK)) {
         HAL_NVIC_DisableIRQ(map->irq);
         return IF_HW_FAULT;
     }
@@ -547,8 +547,8 @@ static IfStatus stm32_stop_capture(PwmCaptureChannel channel)
     cap = &captures[channel];
     HAL_NVIC_DisableIRQ(capture_map[channel].irq);
     __HAL_TIM_DISABLE_IT(&cap->htim, TIM_IT_UPDATE);
-    (void)HAL_TIM_IC_Stop_IT(&cap->htim, TIM_CHANNEL_1);
-    (void)HAL_TIM_IC_Stop(&cap->htim, TIM_CHANNEL_2);
+    (void)HAL_TIM_IC_Stop_IT(&cap->htim, TIM_CHANNEL_2);
+    (void)HAL_TIM_IC_Stop(&cap->htim, TIM_CHANNEL_1);
     cap->capturing = false;
     return IF_OK;
 }

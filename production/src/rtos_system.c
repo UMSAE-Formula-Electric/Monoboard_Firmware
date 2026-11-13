@@ -43,8 +43,7 @@
  * every stack size, are PLACEHOLDERS until #24 and #55 set measured values.
  *
  * Boot sits at the highest application priority, so its init hook runs
- * before any other service's first step, and its 500 ms heartbeat (a 1 Hz
- * square wave on PC0) is never delayed by them.
+ * before any other service's first step.
  * ---------------------------------------------------------------------- */
 
 #define BOOT_PRIORITY       ((UBaseType_t)(configMAX_PRIORITIES - 2U))
@@ -189,9 +188,8 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
         return false;
     }
 
-    /* Inject each service's drivers before its task can run. */
-    boot_svc.gpio = drivers->gpio;
-
+    /* Inject each service's drivers before its task can run. (The boot
+     * service currently needs none; see boot_service.h.) */
     if (xTaskCreateStatic(periodic_task, "boot", (configSTACK_DEPTH_TYPE)BOOT_STACK_WORDS,
                           (void *)&boot_task, BOOT_PRIORITY, boot_stack, &boot_tcb)
         == NULL) {

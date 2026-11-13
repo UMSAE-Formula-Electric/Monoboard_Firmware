@@ -3,8 +3,8 @@
  * @brief Firmware composition root (see ARCHITECTURE.md).
  *
  * Brings the board up, selects the STM32 drivers for rtos_system.c, which
- * owns every queue and task (the boot service and its PC0 heartbeat among
- * them), then starts the scheduler. Driver init runs in each service's task,
+ * owns every queue and task (the boot service among them), then starts the
+ * scheduler. Driver init runs in each service's task,
  * not here. Log sink install lands here once that layer exists.
  *
  * No stm32f4xx_it.c: FreeRTOSConfig.h renames the ARM_CM4F port's SVC,

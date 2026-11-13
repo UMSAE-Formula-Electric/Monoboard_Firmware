@@ -36,7 +36,7 @@ static UartConfig make_config(void)
     UartConfig config = {
         .baud_rate_bps = 115200,
         .data_bits     = 8U,
-        .parity        = UART_PARITY_NONE,
+        .parity        = UART_PARITY_MODE_NONE,
         .stop_bits     = UART_STOP_BITS_1,
     };
     return config;

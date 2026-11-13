@@ -155,7 +155,7 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_gpio.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_iwdg.c
-            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_usart.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_uart.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim.c
