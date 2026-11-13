@@ -1,0 +1,15 @@
+
+# <Imperative subject, ~50 chars, capitalised, no period>
+#
+# Why the change was needed: what was wrong or missing.
+# Then what this commit does about it. Wrap at 72 columns.
+#
+# Optional trailers:
+#   Addresses review on #<PR>
+#   Closes #<issue>
+#
+# Sign off with `git commit -s` (or the Sign-off option in your IDE).
+#
+# Set up once per clone:
+#   git config commit.template .gitmessage
+#   git config commit.cleanup strip

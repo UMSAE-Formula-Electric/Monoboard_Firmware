@@ -22,9 +22,54 @@ extern "C" {
 
 /* Logical pin catalogue for this board. The concrete driver maps each
  * entry to a physical port/pad. Keep GPIO_PIN_COUNT last -- both the fake
- * and the real driver size their tables from it. */
+ * and the real driver size their tables from it.
+ *
+ * Names follow the board's schematic net labels (the .ioc User Labels,
+ * upper-cased), which are owned by the hardware team -- hence the mix of
+ * _UC / _CTRL / _OUT suffixes. tools/ioc_check.py enforces the match. */
 typedef enum {
-    GPIO_PIN_TEST = 0,
+    /* Inputs: driver controls */
+    GPIO_PIN_TSA_BTN_UC = 0,
+    GPIO_PIN_RTD_BTN_UC,
+    GPIO_PIN_LAUNCH_BTN_UC,
+    GPIO_PIN_TRACTION_BTN_UC,
+    GPIO_PIN_BRAKE_PRESS_UC,
+
+    /* Inputs: safety-loop status */
+    GPIO_PIN_SDC_STATUS_UC,
+    GPIO_PIN_AMS_FAULT_UC,
+    GPIO_PIN_AMS_STATE_UC,
+    GPIO_PIN_IMD_FAULT_UC,
+    GPIO_PIN_IMD_STATE_UC,
+    GPIO_PIN_BSPD_FAULT_UC,
+    GPIO_PIN_BSPD_STATE_UC,
+    GPIO_PIN_AIR_NEG_FB_UC,
+    GPIO_PIN_AIR_POS_FB_UC,
+
+    /* Inputs: load feedback */
+    GPIO_PIN_MC_PWR_FB_UC,
+    GPIO_PIN_PUMP_FB_UC,
+    GPIO_PIN_FANS_FB_UC,
+    GPIO_PIN_BUZR_FB_UC,
+
+    /* Outputs: safety loop / tractive system */
+    GPIO_PIN_SDC_CTRL_UC,
+    GPIO_PIN_AMS_CLR_ERR_UC,
+    GPIO_PIN_AIR_NEG_CTRL_UC,
+    GPIO_PIN_AIR_POS_CTRL_UC,
+    GPIO_PIN_PRECHRG_CTRL_UC,
+
+    /* Outputs: loads */
+    GPIO_PIN_MC_PWR_CTRL,
+    GPIO_PIN_PUMP_CTRL,
+    GPIO_PIN_FANS_CTRL,
+    GPIO_PIN_BUZR_CTRL,
+
+    /* Outputs: dash LEDs */
+    GPIO_PIN_RTD_LED_OUT,
+    GPIO_PIN_LC_LED_OUT,
+    GPIO_PIN_TC_LED_OUT,
+
     GPIO_PIN_COUNT,
 } GpioPin;
 

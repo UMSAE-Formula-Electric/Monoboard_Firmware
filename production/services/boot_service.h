@@ -1,40 +1,37 @@
 /**
  * @file boot_service.h
- * @brief Boot service: first to run after the scheduler starts, then a
- * heartbeat on GPIO_PIN_TEST (PC0 on the board) for the rest of the run.
+ * @brief Boot service: the first service to run after the scheduler starts.
  *
- * The heartbeat proves on hardware that the kernel tick and the clock tree
- * agree: rtos_system.c steps this every 500 ms, so the pin is a 1 Hz square
- * wave, and any other period means the tick or the clocks are wrong.
+ * It used to toggle a heartbeat pin to prove the kernel tick and the clock
+ * tree agree on hardware. That pin (TEST, PC0) left the .ioc when the real
+ * board pinout landed (issue #29), and every remaining discrete output
+ * drives something on the car, so the heartbeat is gone for now. SEAM: it
+ * comes back on a DEBUG_LED PWM channel once pwm_if has one.
  */
 #ifndef BOOT_SERVICE_H
 #define BOOT_SERVICE_H
 
 #include <stdbool.h>
 
-#include "gpio_if.h"
 #include "if_status.h"
 
-/** Boot service context. The composition root owns the storage and sets
- *  @c gpio before init; @c ready is the service's own. */
+/** Boot service context. The composition root owns the storage. */
 typedef struct {
-    const GpioIf *gpio;  /**< GPIO driver; must outlive the service */
-    bool          ready; /**< set by a successful boot_service_init() */
+    bool ready; /**< set by a successful boot_service_init() */
 } BootService;
 
 /* Both functions take @c void *ctx so rtos_system.c's PeriodicTask can call
  * them directly; @p ctx must point to a BootService. */
 
 /**
- * Configure GPIO_PIN_TEST as a push-pull output, driven low. Call once,
- * from the boot task, before the first vBootServiceStep().
- * @param ctx  BootService with @c gpio set
- * @return #IF_OK, #IF_HW_FAULT if @p ctx or its @c gpio is NULL, or the
- *         driver's error
+ * Bring the service up. Call once, from the boot task, before the first
+ * vBootServiceStep().
+ * @param ctx  BootService
+ * @return #IF_OK, or #IF_HW_FAULT if @p ctx is NULL
  */
 IfStatus boot_service_init(void *ctx);
 
-/** Toggle the heartbeat pin. Does nothing before a successful init.
+/** Periodic step. Does nothing today (see the file comment).
  *  @param ctx  the BootService passed to boot_service_init() */
 void vBootServiceStep(void *ctx);
 

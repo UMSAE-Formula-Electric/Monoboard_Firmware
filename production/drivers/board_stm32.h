@@ -2,9 +2,11 @@
  * @file board_stm32.h
  * @brief STM32F446 board bring-up: HAL init, clock tree and the HAL timebase.
  *
- * The HAL tick runs from TIM10, as vendor.ioc selects
+ * The HAL tick runs from TIM6, as vendor.ioc selects
  * (stm32f4xx_hal_timebase_tim.c), so SysTick belongs to the FreeRTOS kernel
- * alone. This module owns the TIM10 vector that feeds the HAL tick.
+ * alone. TIM6 has no pins, so the HAL tick costs no pad; TIM10 is free for
+ * DEBUG_LED_B2 (PB8). This module owns the TIM6 vector that feeds the HAL
+ * tick.
  */
 #ifndef BOARD_STM32_H
 #define BOARD_STM32_H
@@ -14,7 +16,7 @@ extern "C" {
 #endif
 
 /**
- * Reset the peripherals, start the HAL tick on TIM10 and configure the
+ * Reset the peripherals, start the HAL tick on TIM6 and configure the
  * clock tree. Call first in main(), before any other driver: every HAL
  * timeout counts ticks, and every driver's timing derives from the clocks.
  * A clock-configuration failure ends in the CubeMX Error_Handler().

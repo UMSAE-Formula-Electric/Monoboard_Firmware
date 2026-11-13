@@ -155,7 +155,7 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_gpio.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_iwdg.c
-            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_usart.c
+            ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_uart.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_can.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_dma.c
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_tim.c
@@ -164,7 +164,7 @@ if(PLATFORM_MCU)
             ${HAL_DRIVER_PATH}/Src/stm32f4xx_hal_cortex.c
             ${VENDOR}/Core/Src/main.c
             ${VENDOR}/Core/Src/system_stm32f4xx.c
-            ${VENDOR}/Core/Src/stm32f4xx_hal_timebase_tim.c  # HAL tick on TIM10
+            ${VENDOR}/Core/Src/stm32f4xx_hal_timebase_tim.c  # HAL tick on TIM6
     )
     target_include_directories(stm32_hal PUBLIC
             ${HAL_DRIVER_PATH}/Inc

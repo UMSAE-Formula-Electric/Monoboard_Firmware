@@ -26,14 +26,14 @@
 extern "C" {
 #endif
 
-/* Prefixed UART_, not the HAL's USART_: ST's HAL headers (stm32f4xx_hal_
- * usart.h / stm32f4xx_hal_uart.h) #define USART_PARITY_NONE/EVEN/ODD as raw
+/* Named UART_PARITY_MODE_*, not UART_PARITY_* or USART_PARITY_*: ST's HAL
+ * headers #define both of those (stm32f4xx_hal_uart.h / _usart.h) as raw
  * register-bit constants. Colliding with a #define instead of an enum
  * shadows silently rather than erroring, so the names must not match. */
 typedef enum {
-    UART_PARITY_NONE = 0,
-    UART_PARITY_EVEN,
-    UART_PARITY_ODD,
+    UART_PARITY_MODE_NONE = 0,
+    UART_PARITY_MODE_EVEN,
+    UART_PARITY_MODE_ODD,
 } UartParity;
 
 typedef enum {
