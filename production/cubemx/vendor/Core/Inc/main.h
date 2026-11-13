@@ -143,6 +143,8 @@ void Error_Handler(void);
 #define MAIN_CAN_RX_GPIO_Port GPIOA
 #define MAIN_CAN_TX_Pin GPIO_PIN_12
 #define MAIN_CAN_TX_GPIO_Port GPIOA
+#define DEBUG_LED_R_Pin GPIO_PIN_15
+#define DEBUG_LED_R_GPIO_Port GPIOA
 #define TRACTION_BTN_uC_Pin GPIO_PIN_3
 #define TRACTION_BTN_uC_GPIO_Port GPIOD
 #define SDC_STATUS_uC_Pin GPIO_PIN_6

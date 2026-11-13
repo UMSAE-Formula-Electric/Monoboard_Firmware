@@ -165,7 +165,8 @@ static bool enable_port_clock(const GPIO_TypeDef *port)
 }
 
 /* Enables the timer's bus clock. Only the general-purpose timers this
- * driver may own are listed; TIM10 is the HAL timebase and is excluded. */
+ * driver may own are listed; TIM6 (the HAL timebase) is basic and has no
+ * channels, so it can never appear here. */
 static bool enable_timer_clock(const TIM_TypeDef *timer)
 {
     if (timer == TIM2) {
@@ -437,7 +438,7 @@ static void capture_isr(PwmCaptureChannel channel)
 /**
  * @brief TIM4 global interrupt vector -- PWM_CAP_CH_TEST. Flags are handled
  * directly rather than through HAL_TIM_IRQHandler so this driver does not
- * claim the global weak HAL_TIM_*Callback hooks (the HAL timebase on TIM10
+ * claim the global weak HAL_TIM_*Callback hooks (the HAL timebase on TIM6
  * may need them).
  */
 void TIM4_IRQHandler(void)

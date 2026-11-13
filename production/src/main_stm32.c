@@ -9,7 +9,7 @@
  *
  * No stm32f4xx_it.c: FreeRTOSConfig.h renames the ARM_CM4F port's SVC,
  * PendSV and SysTick handlers onto the vector table's names, board_stm32.c
- * owns the TIM10 HAL-tick vector, and fault_stm32.c the fault vectors.
+ * owns the TIM6 HAL-tick vector, and fault_stm32.c the fault vectors.
  */
 #include "FreeRTOS.h"
 #include "task.h"
