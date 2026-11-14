@@ -42,7 +42,7 @@ EXPECTED = {
     "cal": ["ERR unavailable: needs #61"],
     "cal set x 1": [REFUSED],
     "selftest": ["ERR unavailable: needs #50"],
-    "set test 1": [REFUSED, UNKNOWN],
+    "set rtd_led 1": [REFUSED, UNKNOWN],
     "nope": [UNKNOWN],
 }
 

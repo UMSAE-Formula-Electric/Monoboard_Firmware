@@ -29,10 +29,39 @@ typedef struct {
  * equal to the enumerator minus its GPIO_PIN_ prefix (GPIO_PIN_FOO -> "FOO"),
  * regenerate, add the row here, and bump the _Static_assert. */
 static const PinMap pin_map[GPIO_PIN_COUNT] = {
-    [GPIO_PIN_TEST] = {TEST_GPIO_Port, TEST_Pin},
+    [GPIO_PIN_TSA_BTN_UC]      = {TSA_BTN_uC_GPIO_Port, TSA_BTN_uC_Pin},
+    [GPIO_PIN_RTD_BTN_UC]      = {RTD_BTN_uC_GPIO_Port, RTD_BTN_uC_Pin},
+    [GPIO_PIN_LAUNCH_BTN_UC]   = {LAUNCH_BTN_uC_GPIO_Port, LAUNCH_BTN_uC_Pin},
+    [GPIO_PIN_TRACTION_BTN_UC] = {TRACTION_BTN_uC_GPIO_Port, TRACTION_BTN_uC_Pin},
+    [GPIO_PIN_BRAKE_PRESS_UC]  = {BRAKE_PRESS_uC_GPIO_Port, BRAKE_PRESS_uC_Pin},
+    [GPIO_PIN_SDC_STATUS_UC]   = {SDC_STATUS_uC_GPIO_Port, SDC_STATUS_uC_Pin},
+    [GPIO_PIN_AMS_FAULT_UC]    = {AMS_FAULT_uC_GPIO_Port, AMS_FAULT_uC_Pin},
+    [GPIO_PIN_AMS_STATE_UC]    = {AMS_STATE_uC_GPIO_Port, AMS_STATE_uC_Pin},
+    [GPIO_PIN_IMD_FAULT_UC]    = {IMD_FAULT_uC_GPIO_Port, IMD_FAULT_uC_Pin},
+    [GPIO_PIN_IMD_STATE_UC]    = {IMD_STATE_uC_GPIO_Port, IMD_STATE_uC_Pin},
+    [GPIO_PIN_BSPD_FAULT_UC]   = {BSPD_FAULT_uC_GPIO_Port, BSPD_FAULT_uC_Pin},
+    [GPIO_PIN_BSPD_STATE_UC]   = {BSPD_STATE_uC_GPIO_Port, BSPD_STATE_uC_Pin},
+    [GPIO_PIN_AIR_NEG_FB_UC]   = {AIR_NEG_FB_uC_GPIO_Port, AIR_NEG_FB_uC_Pin},
+    [GPIO_PIN_AIR_POS_FB_UC]   = {AIR_POS_FB_uC_GPIO_Port, AIR_POS_FB_uC_Pin},
+    [GPIO_PIN_MC_PWR_FB_UC]    = {MC_PWR_FB_uC_GPIO_Port, MC_PWR_FB_uC_Pin},
+    [GPIO_PIN_PUMP_FB_UC]      = {PUMP_FB_uC_GPIO_Port, PUMP_FB_uC_Pin},
+    [GPIO_PIN_FANS_FB_UC]      = {FANS_FB_uC_GPIO_Port, FANS_FB_uC_Pin},
+    [GPIO_PIN_BUZR_FB_UC]      = {BUZR_FB_uC_GPIO_Port, BUZR_FB_uC_Pin},
+    [GPIO_PIN_SDC_CTRL_UC]     = {SDC_CTRL_uC_GPIO_Port, SDC_CTRL_uC_Pin},
+    [GPIO_PIN_AMS_CLR_ERR_UC]  = {AMS_CLR_ERR_uC_GPIO_Port, AMS_CLR_ERR_uC_Pin},
+    [GPIO_PIN_AIR_NEG_CTRL_UC] = {AIR_NEG_CTRL_uC_GPIO_Port, AIR_NEG_CTRL_uC_Pin},
+    [GPIO_PIN_AIR_POS_CTRL_UC] = {AIR_POS_CTRL_uC_GPIO_Port, AIR_POS_CTRL_uC_Pin},
+    [GPIO_PIN_PRECHRG_CTRL_UC] = {PRECHRG_CTRL_uC_GPIO_Port, PRECHRG_CTRL_uC_Pin},
+    [GPIO_PIN_MC_PWR_CTRL]     = {MC_PWR_CTRL_GPIO_Port, MC_PWR_CTRL_Pin},
+    [GPIO_PIN_PUMP_CTRL]       = {PUMP_CTRL_GPIO_Port, PUMP_CTRL_Pin},
+    [GPIO_PIN_FANS_CTRL]       = {FANS_CTRL_GPIO_Port, FANS_CTRL_Pin},
+    [GPIO_PIN_BUZR_CTRL]       = {BUZR_CTRL_GPIO_Port, BUZR_CTRL_Pin},
+    [GPIO_PIN_RTD_LED_OUT]     = {RTD_LED_OUT_GPIO_Port, RTD_LED_OUT_Pin},
+    [GPIO_PIN_LC_LED_OUT]      = {LC_LED_OUT_GPIO_Port, LC_LED_OUT_Pin},
+    [GPIO_PIN_TC_LED_OUT]      = {TC_LED_OUT_GPIO_Port, TC_LED_OUT_Pin},
 };
 
-_Static_assert(GPIO_PIN_COUNT == 1,
+_Static_assert(GPIO_PIN_COUNT == 30,
                "GpioPin catalogue changed -- add/remove the matching pin_map[] row above");
 
 static bool enable_port_clock(const GPIO_TypeDef *port)
@@ -45,6 +74,8 @@ static bool enable_port_clock(const GPIO_TypeDef *port)
         __HAL_RCC_GPIOC_CLK_ENABLE();
     } else if (port == GPIOD) {
         __HAL_RCC_GPIOD_CLK_ENABLE();
+    } else if (port == GPIOE) {
+        __HAL_RCC_GPIOE_CLK_ENABLE();
     } else if (port == GPIOH) {
         __HAL_RCC_GPIOH_CLK_ENABLE();
     } else {

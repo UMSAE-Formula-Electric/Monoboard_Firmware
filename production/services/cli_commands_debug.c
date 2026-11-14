@@ -16,13 +16,32 @@
 #include "cli_core.h"
 #include "gpio_if.h"
 
+/* Pins `set` may drive: the dash LEDs only. They are harmless to force,
+ * unlike the safety-loop and tractive-system outputs, which stay out of
+ * this table on purpose. */
+typedef struct {
+    const char *name;
+    GpioPin     pin;
+} CliSetPin;
+
+static const CliSetPin set_pins[] = {
+    {"rtd_led", GPIO_PIN_RTD_LED_OUT},
+    {"lc_led", GPIO_PIN_LC_LED_OUT},
+    {"tc_led", GPIO_PIN_TC_LED_OUT},
+};
+
+#define SET_PIN_COUNT (sizeof(set_pins) / sizeof(set_pins[0]))
+#define SET_PIN_NAMES "rtd_led lc_led tc_led"
+
 /* Not static on purpose: the release check looks for this symbol in the
  * mcu-release map file to prove the command was not compiled in. */
 /* NOLINTNEXTLINE(misc-use-internal-linkage) */
 bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out);
 
 /**
- * `set <pin> <0|1>`: drive one output pin, for wiring checks.
+ * `set <pin> <0|1>`: drive one dash LED, for wiring checks. The pin is
+ * (re)configured as a push-pull output at the requested level, so it works
+ * before any service has claimed it.
  * @param core  CLI state; its ports provide the GPIO interface
  * @param argc  must be 2
  * @param argv  pin name, then "0" or "1"
@@ -32,7 +51,9 @@ bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out);
 /* NOLINTNEXTLINE(misc-use-internal-linkage) */
 bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out)
 {
-    GpioLevel level;
+    const CliSetPin *target = NULL;
+    GpioLevel        level;
+    size_t           i;
 
     if (argc != 2) {
         return cli_fail(core, "usage: set <pin> <0|1>");
@@ -40,9 +61,14 @@ bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out)
     if ((core->ports == NULL) || (core->ports->gpio == NULL)) {
         return cli_fail(core, "unavailable: no gpio port");
     }
-    /* The only pin in the catalogue today (gpio_if.h). */
-    if (strcmp(argv[0], "test") != 0) {
-        return cli_fail(core, "unknown pin, known: test");
+    for (i = 0U; i < SET_PIN_COUNT; i++) {
+        if (strcmp(argv[0], set_pins[i].name) == 0) {
+            target = &set_pins[i];
+            break;
+        }
+    }
+    if (target == NULL) {
+        return cli_fail(core, "unknown pin, known: " SET_PIN_NAMES);
     }
     if (strcmp(argv[1], "0") == 0) {
         level = GPIO_LOW;
@@ -51,10 +77,15 @@ bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out)
     } else {
         return cli_fail(core, "value must be 0 or 1");
     }
-    if (core->ports->gpio->write(GPIO_PIN_TEST, level) != IF_OK) {
-        return cli_fail(core, "gpio write failed");
+    {
+        const GpioConfig config = {
+            .dir = GPIO_DIR_OUTPUT, .pull = GPIO_PULL_NONE, .initial = level};
+
+        if (core->ports->gpio->init(target->pin, &config) != IF_OK) {
+            return cli_fail(core, "gpio write failed");
+        }
     }
-    cli_out_printf(out, "test=%u" CLI_EOL, (level == GPIO_HIGH) ? 1U : 0U);
+    cli_out_printf(out, "%s=%u" CLI_EOL, target->name, (level == GPIO_HIGH) ? 1U : 0U);
     return true;
 }
 

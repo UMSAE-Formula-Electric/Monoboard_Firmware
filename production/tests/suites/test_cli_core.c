@@ -206,7 +206,7 @@ static const CliPorts test_ports = {
     .gpio          = &gpio_fake,
 };
 
-/* Fresh CLI with ports and a configured, low test pin. */
+/* Fresh CLI with ports and a configured, low RTD LED. */
 static void setup_with_ports(bool safe)
 {
     const GpioConfig config = {
@@ -217,7 +217,7 @@ static void setup_with_ports(bool safe)
 
     setup();
     gpio_fake_reset();
-    (void)gpio_fake.init(GPIO_PIN_TEST, &config);
+    (void)gpio_fake.init(GPIO_PIN_RTD_LED_OUT, &config);
     vehicle_safe = safe;
     cli_core_set_ports(&core, &test_ports);
 }
@@ -318,8 +318,8 @@ TEST(cli_core, set_is_refused_when_not_safe_and_pin_does_not_move)
 {
     setup_with_ports(false);
     if (cli_debug_command_count > 0U) {
-        CHECK(ends_with(run("set test 1\r"), "ERR refused: vehicle not in safe state\r\nmb> "));
-        CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_LOW);
+        CHECK(ends_with(run("set rtd_led 1\r"), "ERR refused: vehicle not in safe state\r\nmb> "));
+        CHECK(gpio_fake_level(GPIO_PIN_RTD_LED_OUT) == GPIO_LOW);
     }
 }
 
@@ -327,10 +327,23 @@ TEST(cli_core, set_drives_the_pin_when_safe)
 {
     setup_with_ports(true);
     if (cli_debug_command_count > 0U) {
-        CHECK(strcmp(run("set test 1\r"), "set test 1\r\ntest=1\r\nOK\r\nmb> ") == 0);
-        CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_HIGH);
-        CHECK(strcmp(run("set test 0\r"), "set test 0\r\ntest=0\r\nOK\r\nmb> ") == 0);
-        CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_LOW);
+        CHECK(strcmp(run("set rtd_led 1\r"), "set rtd_led 1\r\nrtd_led=1\r\nOK\r\nmb> ") == 0);
+        CHECK(gpio_fake_level(GPIO_PIN_RTD_LED_OUT) == GPIO_HIGH);
+        CHECK(strcmp(run("set rtd_led 0\r"), "set rtd_led 0\r\nrtd_led=0\r\nOK\r\nmb> ") == 0);
+        CHECK(gpio_fake_level(GPIO_PIN_RTD_LED_OUT) == GPIO_LOW);
+    }
+}
+
+TEST(cli_core, set_configures_an_unclaimed_dash_led)
+{
+    /* lc_led and tc_led were never init()'d: set must configure them. */
+    setup_with_ports(true);
+    if (cli_debug_command_count > 0U) {
+        CHECK(ends_with(run("set lc_led 1\r"), "lc_led=1\r\nOK\r\nmb> "));
+        CHECK(gpio_fake_dir(GPIO_PIN_LC_LED_OUT) == GPIO_DIR_OUTPUT);
+        CHECK(gpio_fake_level(GPIO_PIN_LC_LED_OUT) == GPIO_HIGH);
+        CHECK(ends_with(run("set tc_led 1\r"), "tc_led=1\r\nOK\r\nmb> "));
+        CHECK(gpio_fake_level(GPIO_PIN_TC_LED_OUT) == GPIO_HIGH);
     }
 }
 
@@ -339,9 +352,10 @@ TEST(cli_core, set_rejects_bad_arguments)
     setup_with_ports(true);
     if (cli_debug_command_count > 0U) {
         CHECK(ends_with(run("set\r"), "ERR usage: set <pin> <0|1>\r\nmb> "));
-        CHECK(ends_with(run("set nope 1\r"), "ERR unknown pin, known: test\r\nmb> "));
-        CHECK(ends_with(run("set test 2\r"), "ERR value must be 0 or 1\r\nmb> "));
-        CHECK(gpio_fake_level(GPIO_PIN_TEST) == GPIO_LOW);
+        CHECK(ends_with(run("set nope 1\r"),
+                        "ERR unknown pin, known: rtd_led lc_led tc_led\r\nmb> "));
+        CHECK(ends_with(run("set rtd_led 2\r"), "ERR value must be 0 or 1\r\nmb> "));
+        CHECK(gpio_fake_level(GPIO_PIN_RTD_LED_OUT) == GPIO_LOW);
     }
 }
 

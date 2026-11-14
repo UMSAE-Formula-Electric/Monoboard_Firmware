@@ -1,0 +1,30 @@
+# Line endings: every text file is stored and checked out with LF, whatever
+# each clone's core.autocrlf says. Git detects text vs binary itself; files
+# already committed with CRLF (some vendored FreeRTOS and CubeMX files) are
+# left as they are rather than rewritten.
+* text=auto eol=lf
+
+# Binary: never diffed or converted.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.elf  binary
+*.bin  binary
+*.hex  binary
+
+# Vendored code: hidden from GitHub's language stats and collapsed in PR
+# diffs, so reviews and the repo summary show the first-party firmware.
+lib/**                     linguist-vendored
+production/cubemx/vendor/** linguist-vendored
+
+# Generated output.
+graphify-out/** linguist-generated
+
+# CubeMX project file: tracked, but CubeMX rewrites large parts of it on every
+# save, so `git diff` reports only "Binary files differ" instead of the full
+# text, and GitHub collapses it in PRs. `git diff --text` shows it anyway.
+*.ioc -diff linguist-generated

@@ -133,7 +133,7 @@ Reset the board to see the boot report followed by the `mb> ` prompt. Every repl
 | `log` | last 16 command lines with time and verdict |
 | `boot` | reset cause and last crash record |
 | `health` | CLI and RTOS counters (dropped bytes, worst handler time, stack headroom) |
-| `set <pin> <0\|1>` | drive an output pin; Debug builds only |
+| `set <pin> <0\|1>` | drive a dash LED (`rtd_led`, `lc_led`, `tc_led`); Debug builds only |
 | `state`, `faults`, `faults clear`, `cal`, `cal set`, `selftest` | `ERR unavailable: needs #NN` until the owning service exists |
 
 Commands that change something on the vehicle (`set`, `faults clear`, `cal set`) are refused unless the vehicle is in a

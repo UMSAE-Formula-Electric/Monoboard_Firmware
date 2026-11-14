@@ -37,7 +37,7 @@ static const CliPorts fuzz_ports = {
 
 /* Command words mixed into the noise so real handlers run too. */
 static const char *const fuzz_words[] = {
-    "help\r",  "log\r",     "health\r", "version\r",      "boot\r", "set test 1\r",
+    "help\r",  "log\r",     "health\r", "version\r",      "boot\r", "set rtd_led 1\r",
     "faults ", "clear\r\n", "cal set ", "uptime uptime ", "\b\b",   "\x03",
 };
 
@@ -76,7 +76,7 @@ TEST(cli_fuzz, random_bytes_never_break_the_cli)
 
     fuzz_state = 0x51C0FFEEU;
     gpio_fake_reset();
-    (void)gpio_fake.init(GPIO_PIN_TEST, &config);
+    (void)gpio_fake.init(GPIO_PIN_RTD_LED_OUT, &config);
     cli_core_init(&core);
     cli_core_set_ports(&core, &fuzz_ports);
     cli_core_set_boot_report(&core, "reset=POR\n");
@@ -97,7 +97,9 @@ TEST(cli_fuzz, random_bytes_never_break_the_cli)
                         && (core.log_count <= CLI_LOG_DEPTH);
             /* A fresh output buffer always has room: no progress is a bug. */
             progress_ok  = progress_ok && (consumed > 0U);
-            never_forced = never_forced && (gpio_fake_level(GPIO_PIN_TEST) == GPIO_LOW);
+            never_forced = never_forced && (gpio_fake_level(GPIO_PIN_RTD_LED_OUT) == GPIO_LOW)
+                           && (gpio_fake_level(GPIO_PIN_LC_LED_OUT) == GPIO_LOW)
+                           && (gpio_fake_level(GPIO_PIN_TC_LED_OUT) == GPIO_LOW);
             if (consumed == 0U) {
                 break;
             }

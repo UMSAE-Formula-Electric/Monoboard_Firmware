@@ -174,8 +174,7 @@ is reviewable at a glance and the two executables cannot drift apart. It is
 platform-neutral and receives drivers through `RtosSystemDrivers`. Each main
 keeps only what is specific to that executable: driver selection, scheduler
 start, and its own tasks (the sim's control and probe tasks). The boot
-service, which runs first and then drives the PC0 heartbeat, is a shared
-task like the rest.
+service, which runs first, is a shared task like the rest.
 
 Different executables = different compositions, same layers:
 
