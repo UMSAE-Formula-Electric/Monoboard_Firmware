@@ -16,6 +16,9 @@
 #include "cli_core.h"
 #include "gpio_if.h"
 
+/* Not static on purpose: the release check looks for this symbol in the
+ * mcu-release map file to prove the command was not compiled in. */
+/* NOLINTNEXTLINE(misc-use-internal-linkage) */
 bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out);
 
 /**
@@ -26,6 +29,7 @@ bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out);
  * @param out   reply body
  * @return true if the pin was driven
  */
+/* NOLINTNEXTLINE(misc-use-internal-linkage) */
 bool cli_cmd_set(CliCore *core, int argc, char *argv[], CliOut *out)
 {
     GpioLevel level;

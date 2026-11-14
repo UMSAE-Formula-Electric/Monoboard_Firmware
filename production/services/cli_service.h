@@ -1,25 +1,28 @@
 /**
- * @file cli.h
+ * @file cli_service.h
  * @brief Debug CLI service (issue #51): moves bytes between the UART and
  * cli_core.
  *
- * A periodic service like every other one in rtos_system.c: a context
- * struct, an init hook that brings up the UART it owns, and a step function.
- * The CLI itself is a single instance, so the context only carries the
- * wiring; its state lives in cli.c. The receive callback, in interrupt context, only copies bytes
- * into a stream buffer; the step takes them out, feeds cli_core and transmits the reply. Nothing
- * here blocks.
+ * A periodic service like the others in rtos_system.c: a context struct, an
+ * init hook that brings up the UART it owns, and a step function. There is
+ * one CLI, so the context only carries the wiring and the state lives in
+ * cli_service.c.
+ *
+ * The receive callback runs in interrupt context and only copies bytes into
+ * a stream buffer. The step takes them out, feeds cli_core and transmits the
+ * reply. Nothing here blocks.
  *
  * Memory, all static: a 512-byte receive stream buffer, two 1024-byte
  * transmit buffers and one CliCore (about 0.8 KB). Timing: one step handles
  * at most one command line.
  */
-#ifndef MONOBOARD_CLI_H
-#define MONOBOARD_CLI_H
+#ifndef CLI_SERVICE_H
+#define CLI_SERVICE_H
 
 #include <stdbool.h>
 
 #include "cli_core.h"
+#include "if_status.h"
 #include "uart_if.h"
 
 #ifdef __cplusplus
@@ -38,8 +41,8 @@ typedef struct {
  * Init hook for rtos_system.c's PeriodicTask: bring up the UART, then start
  * the CLI on it. Runs once, in the CLI task, before the first step.
  * @param ctx  CliService with every field set
- * @return #IF_OK, the UART driver's error, or #IF_HW_FAULT if @p ctx or
- *         its @c uart is NULL or cli_init() rejected the wiring
+ * @return #IF_OK, the UART driver's error, cli_init()'s error, or
+ *         #IF_HW_FAULT if @p ctx or its @c uart is NULL
  */
 IfStatus cli_service_init(void *ctx);
 
@@ -48,11 +51,12 @@ IfStatus cli_service_init(void *ctx);
  * after the UART driver's init(). cli_service_init() does both.
  * @param uart   UART to talk on; must outlive the CLI
  * @param ports  what the CLI may reach; @c is_safe_state is mandatory
- * @return false if @p uart, @p ports or @c ports->is_safe_state is NULL.
- *         A UART that cannot receive is not an error: the CLI then only
- *         prints (boot report and prompt).
+ * @return #IF_OK, or #IF_HW_FAULT if @p uart, @p ports or
+ *         @c ports->is_safe_state is NULL, or the receive stream buffer
+ *         could not be created. A UART that cannot receive is not an error:
+ *         the CLI then only prints (boot report and prompt).
  */
-bool cli_init(const UartIf *uart, const CliPorts *ports);
+IfStatus cli_init(const UartIf *uart, const CliPorts *ports);
 
 /**
  * Text printed once at start and by the `boot` command. May be called
@@ -69,4 +73,4 @@ void vCliServiceStep(void *ctx);
 }
 #endif
 
-#endif /* MONOBOARD_CLI_H */
+#endif /* CLI_SERVICE_H */

@@ -30,7 +30,7 @@
 
 #include "FreeRTOS.h"
 #include "boot_service.h"
-#include "cli.h"
+#include "cli_service.h"
 #include "service_stubs.h"
 #include "task.h"
 

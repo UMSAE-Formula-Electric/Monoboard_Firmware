@@ -193,40 +193,46 @@ run_command(CliCore *core, const CliCommand *command, int argc, char *argv[], Cl
     return CLI_VERDICT_OK;
 }
 
-/* A complete line is in core->line: answer it and log it. */
+/* A complete, non-empty line is in core->line: look it up, run it, log it. */
+static void dispatch_line(CliCore *core, CliOut *out)
+{
+    char   text[CLI_LOG_TEXT_SIZE];
+    char  *argv[CLI_MAX_ARGS];
+    size_t name_words = 0U;
+
+    /* Keep the text for the log: split_words() cuts the line up. */
+    copy_text(text, sizeof(text), core->line);
+
+    const size_t argc = split_words(core, argv);
+
+    if (argc == 0U) {
+        return; /* only spaces: just a fresh prompt */
+    }
+    if (argc > CLI_MAX_ARGS) {
+        out_tail(out, "ERR too many words" CLI_EOL);
+        log_add(core, CLI_VERDICT_ERR, text);
+        return;
+    }
+
+    const CliCommand *command = find_command(argc, argv, &name_words);
+
+    if (command == NULL) {
+        out_tail(out, "ERR unknown command, try help" CLI_EOL);
+        log_add(core, CLI_VERDICT_UNKNOWN, text);
+        return;
+    }
+    log_add(core, run_command(core, command, (int)(argc - name_words), &argv[name_words], out),
+            text);
+}
+
+/* The line has ended: answer it, then print the prompt. */
 static void handle_line(CliCore *core, CliOut *out)
 {
-    char              text[CLI_LOG_TEXT_SIZE];
-    char             *argv[CLI_MAX_ARGS];
-    size_t            argc;
-    size_t            name_words = 0U;
-    const CliCommand *command;
-
     if (core->overflow) {
         out_tail(out, "ERR line too long (max 79)" CLI_EOL);
         log_add(core, CLI_VERDICT_ERR, "(overlong line)");
     } else if (core->line_len > 0U) {
-        /* Keep the text for the log: split_words() cuts the line up. */
-        copy_text(text, sizeof(text), core->line);
-
-        argc = split_words(core, argv);
-        if (argc == 0U) {
-            /* Only spaces: just a fresh prompt. */
-        } else if (argc > CLI_MAX_ARGS) {
-            out_tail(out, "ERR too many words" CLI_EOL);
-            log_add(core, CLI_VERDICT_ERR, text);
-        } else {
-            command = find_command(argc, argv, &name_words);
-            if (command == NULL) {
-                out_tail(out, "ERR unknown command, try help" CLI_EOL);
-                log_add(core, CLI_VERDICT_UNKNOWN, text);
-            } else {
-                log_add(
-                    core,
-                    run_command(core, command, (int)(argc - name_words), &argv[name_words], out),
-                    text);
-            }
-        }
+        dispatch_line(core, out);
     } else {
         /* Empty line: just a fresh prompt. */
     }

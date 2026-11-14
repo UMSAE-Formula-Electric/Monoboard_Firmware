@@ -282,6 +282,9 @@ TEST(cli_core, command_names_match_whole_words_only)
 TEST(cli_core, too_many_words_is_an_error)
 {
     setup();
+    /* CLI_MAX_ARGS words are accepted, one more is not. */
+    CHECK(ends_with(run("cal set x 1\r"), "ERR refused: vehicle not in safe state\r\nmb> "));
+    CHECK(ends_with(run("cal set x 1 2\r"), "ERR too many words\r\nmb> "));
     CHECK(ends_with(run("a b c d e f g\r"), "ERR too many words\r\nmb> "));
 }
 

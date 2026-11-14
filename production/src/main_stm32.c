@@ -17,7 +17,7 @@
 #include "adc_stm32.h"
 #include "board_stm32.h"
 #include "can_stm32.h"
-#include "cli.h"
+#include "cli_service.h"
 #include "fatal_stm32.h"
 #include "fault_stm32.h"
 #include "fw_info.h"

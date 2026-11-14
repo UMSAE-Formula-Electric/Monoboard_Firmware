@@ -1,8 +1,8 @@
 /**
- * @file cli.c
- * @brief Debug CLI service (issue #51). See cli.h.
+ * @file cli_service.c
+ * @brief Debug CLI service (issue #51). See cli_service.h.
  */
-#include "cli.h"
+#include "cli_service.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -108,6 +108,7 @@ static void cli_feed_received(CliOut *out)
     }
 }
 
+/* cppcheck-suppress constParameterPointer ; signature fixed by PeriodicTask.init */
 IfStatus cli_service_init(void *ctx)
 {
     const CliService *svc = ctx;
@@ -121,13 +122,13 @@ IfStatus cli_service_init(void *ctx)
     if (status != IF_OK) {
         return status;
     }
-    return cli_init(svc->uart, &svc->ports) ? IF_OK : IF_HW_FAULT;
+    return cli_init(svc->uart, &svc->ports);
 }
 
-bool cli_init(const UartIf *uart, const CliPorts *ports)
+IfStatus cli_init(const UartIf *uart, const CliPorts *ports)
 {
     if ((uart == NULL) || (ports == NULL) || (ports->is_safe_state == NULL)) {
-        return false;
+        return IF_HW_FAULT;
     }
 
     cli_uart = uart;
@@ -146,7 +147,7 @@ bool cli_init(const UartIf *uart, const CliPorts *ports)
     cli_rx_stream = xStreamBufferCreateStatic(sizeof(cli_rx_stream_storage), 1U,
                                               cli_rx_stream_storage, &cli_rx_stream_control);
     if (cli_rx_stream == NULL) {
-        return false;
+        return IF_HW_FAULT;
     }
 
     /* A driver without receive (start_rx NULL or failing) leaves the CLI
@@ -154,7 +155,7 @@ bool cli_init(const UartIf *uart, const CliPorts *ports)
     if (uart->start_rx != NULL) {
         (void)uart->start_rx(cli_on_rx, NULL);
     }
-    return true;
+    return IF_OK;
 }
 
 void cli_set_boot_report(const char *text)

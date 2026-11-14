@@ -5,12 +5,12 @@
  *
  * Turns a stream of received bytes into complete command lines, runs the
  * matching command, and writes the text to send back (echo, reply, prompt)
- * into a caller-owned buffer. cli.c moves the bytes between the UART and
- * this module; the unit tests call it directly.
+ * into a caller-owned buffer. cli_service.c moves the bytes between the UART
+ * and this module; the unit tests call it directly.
  *
- * No RTOS, no hardware, no dynamic allocation: plain C that runs the same on
- * the target and in the desktop unit tests. Not re-entrant: one CliCore must
- * only ever be fed from one task.
+ * This file does not use the RTOS, the HAL or the heap, so the same code
+ * runs on the target and in the desktop unit tests. It is not re-entrant:
+ * feed one CliCore from one task only.
  *
  * Memory: sizeof(CliCore) is about 0.8 KB (line buffer plus the command log),
  * static. Timing: cli_core_feed() is O(len) plus one command handler per
@@ -48,8 +48,12 @@ extern "C" {
 /** End of every output line. */
 #define CLI_EOL "\r\n"
 
-/** Most words accepted on one line, command name included. */
-#define CLI_MAX_ARGS 6U
+/**
+ * Most words accepted on one line, command name included. Sized to the
+ * longest command in the tables, `cal set <name> <value>`: 4 words. Raise it
+ * together with the command that needs more.
+ */
+#define CLI_MAX_ARGS 4U
 
 /** Command lines remembered by the log. */
 #define CLI_LOG_DEPTH 16U
@@ -133,8 +137,8 @@ typedef struct CliCore {
 
     uint32_t    worst_handler_us;   /**< longest handler run so far */
     const char *worst_handler_name; /**< the command that took it */
-    uint32_t    rx_dropped;         /**< received bytes lost; set by cli.c */
-    uint32_t    tx_dropped;         /**< replies the UART refused; set by cli.c */
+    uint32_t    rx_dropped;         /**< received bytes lost; set by cli_service.c */
+    uint32_t    tx_dropped;         /**< replies the UART refused; set by cli_service.c */
 } CliCore;
 
 /** Commands present in every build (cli_commands.c). */

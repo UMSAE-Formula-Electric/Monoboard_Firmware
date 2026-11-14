@@ -222,7 +222,7 @@ add_library(services STATIC
         ${PROD}/services/service_stubs.c
         ${PROD}/services/cli_core.c
         ${PROD}/services/cli_commands.c
-        ${PROD}/services/cli.c
+        ${PROD}/services/cli_service.c
         # Output-forcing CLI commands exist in Debug builds only (issue #51).
         $<IF:$<CONFIG:Debug>,${PROD}/services/cli_commands_debug.c,${PROD}/services/cli_commands_debug_none.c>
 )
