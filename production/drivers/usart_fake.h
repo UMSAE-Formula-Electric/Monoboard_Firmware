@@ -55,4 +55,10 @@ size_t usart_fake_call_count(void);
 size_t usart_fake_pop_tx(uint8_t *out, size_t max_size);
 size_t usart_fake_tx_byte_count(void);
 
+/* Receive: delivers @p data to the callback given to start_rx(), in the
+ * caller's context, as one chunk. Returns false (and delivers nothing) if
+ * start_rx() has not been called since the last init()/reset, or on a NULL
+ * @p data or zero @p size. */
+bool usart_fake_inject_rx(const uint8_t *data, size_t size);
+
 #endif  // MONOBOARD_USART_FAKE_H

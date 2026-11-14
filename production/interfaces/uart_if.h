@@ -5,9 +5,9 @@
  * genuinely non-blocking: it queues @c data for DMA and returns immediately,
  * never busy-waiting on the wire.
  *
- * RX is deliberately not part of this contract yet -- it is deferred until
- * the debug CLI needs it (issue #16), and when it lands it should be DMA +
- * idle-line detection, not byte-at-a-time interrupts.
+ * RX arrived with the debug CLI (issue #51): start_rx() hands received
+ * bytes to a callback in chunks. A driver implements it with DMA +
+ * idle-line detection, not byte-at-a-time interrupts (issue #16).
  *
  * Header-only, standard-library types only -- see ARCHITECTURE.md,
  * Interface Layer rules. UARTs are named logically (UART_1); the concrete
@@ -26,14 +26,16 @@
 extern "C" {
 #endif
 
-/* Prefixed UART_, not the HAL's USART_: ST's HAL headers (stm32f4xx_hal_
- * usart.h / stm32f4xx_hal_uart.h) #define USART_PARITY_NONE/EVEN/ODD as raw
- * register-bit constants. Colliding with a #define instead of an enum
- * shadows silently rather than erroring, so the names must not match. */
+/* Prefixed UART_IF_: ST's HAL headers #define both USART_PARITY_NONE/EVEN/ODD
+ * (stm32f4xx_hal_usart.h) and UART_PARITY_NONE/EVEN/ODD (stm32f4xx_hal_uart.h)
+ * as raw register-bit constants. Colliding with a #define instead of an enum
+ * shadows silently rather than erroring -- after the HAL header, the same
+ * name would mean a register bit, not this enumerator -- so the names must
+ * not match either family. */
 typedef enum {
-    UART_PARITY_NONE = 0,
-    UART_PARITY_EVEN,
-    UART_PARITY_ODD,
+    UART_IF_PARITY_NONE = 0,
+    UART_IF_PARITY_EVEN,
+    UART_IF_PARITY_ODD,
 } UartParity;
 
 typedef enum {
@@ -57,6 +59,15 @@ typedef struct {
  * @param bytes_transmitted  always equal to the @p size passed to transmit()
  */
 typedef void (*UartTxCompleteCb)(void *ctx, size_t bytes_transmitted);
+
+/**
+ * Fired when bytes have been received. Invoked from ISR context -- FromISR
+ * APIs only, no blocking, minimal work: copy the bytes out and return.
+ * @param ctx   opaque pointer, exactly what was passed to start_rx()
+ * @param data  received bytes; only valid during the call
+ * @param len   number of bytes in @p data, never 0
+ */
+typedef void (*UartRxCb)(void *ctx, const uint8_t *data, size_t len);
 
 typedef struct {
     /**
@@ -85,6 +96,17 @@ typedef struct {
      *         #IF_HW_FAULT on bad arguments or a peripheral fault
      */
     IfStatus (*transmit)(const uint8_t *data, size_t size, UartTxCompleteCb on_complete, void *ctx);
+
+    /**
+     * Start receiving, and keep receiving until the next init(). Every
+     * chunk of received bytes is handed to @p on_rx. Never blocks.
+     * @param      on_rx  called from ISR context with each chunk; must not
+     *                    be NULL
+     * @param      ctx    opaque pointer passed back to @p on_rx
+     * @return #IF_OK if reception is running, or #IF_HW_FAULT on a NULL
+     *         @p on_rx, before init(), or if the driver cannot receive
+     */
+    IfStatus (*start_rx)(UartRxCb on_rx, void *ctx);
 } UartIf;
 
 #ifdef __cplusplus

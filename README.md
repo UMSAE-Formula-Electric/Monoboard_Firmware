@@ -116,6 +116,36 @@ layers above it.
 STM32_Programmer_CLI -c port=SWD -w build/mcu-debug/Monoboard.elf -v -rst
 ```
 
+## Debug CLI
+The firmware has a text command line on USART2 (PA2 TX, PA3 RX) for bench work: reading the build identity, the boot
+report and health counters without a debugger. On a Nucleo board USART2 is the ST-Link virtual COM port, so the same
+USB cable that flashes the board carries it. Open the port at 115200 baud, 8 data bits, no parity, 1 stop bit:
+```
+picocom -b 115200 /dev/ttyACM0
+```
+Reset the board to see the boot report followed by the `mb> ` prompt. Every reply ends with `OK` or `ERR <reason>`.
+
+| Command | Reply |
+|---|---|
+| `help` | list of commands |
+| `version` | firmware version, git SHA, branch, build type |
+| `uptime` | milliseconds since boot |
+| `log` | last 16 command lines with time and verdict |
+| `boot` | reset cause and last crash record |
+| `health` | CLI and RTOS counters (dropped bytes, worst handler time, stack headroom) |
+| `set <pin> <0\|1>` | drive an output pin; Debug builds only |
+| `state`, `faults`, `faults clear`, `cal`, `cal set`, `selftest` | `ERR unavailable: needs #NN` until the owning service exists |
+
+Commands that change something on the vehicle (`set`, `faults clear`, `cal set`) are refused unless the vehicle is in a
+safe state. Nothing reports the vehicle state yet (issue #25), so today every write command answers
+`ERR refused: vehicle not in safe state`. `set` is not compiled into release builds at all.
+
+To add a command, add one row to the table in `production/services/cli_commands.c`. After changing the CLI or the
+UART driver, run the board test against a flashed board (needs `pip install pyserial`):
+```
+python3 tools/cli_board_test.py
+```
+
 # Releases
 Releases are done such that after a successful integration tests a binary of both the debug and release versions will be
 posted onto the GitHub's release section. Releases will be named Corpus-[version]-yy-mm-dd.elf

@@ -36,7 +36,7 @@ static UartConfig make_config(void)
     UartConfig config = {
         .baud_rate_bps = 115200,
         .data_bits     = 8U,
-        .parity        = UART_PARITY_NONE,
+        .parity        = UART_IF_PARITY_NONE,
         .stop_bits     = UART_STOP_BITS_1,
     };
     return config;
@@ -202,4 +202,73 @@ TEST(usart_fake, reset_clears_init_call_log_and_pending_state)
     CHECK(usart_fake_tx_byte_count() == 0U);
     CHECK(usart_fake_pending_tx_count() == 0U);
     CHECK(usart_fake.transmit(data, sizeof(data), NULL, NULL) == IF_HW_FAULT);
+}
+
+typedef struct {
+    int     call_count;
+    void   *last_ctx;
+    size_t  last_len;
+    uint8_t last_first_byte;
+} RxRecord;
+
+static RxRecord rx_record;
+
+static void on_rx(void *ctx, const uint8_t *data, size_t len)
+{
+    rx_record.call_count++;
+    rx_record.last_ctx        = ctx;
+    rx_record.last_len        = len;
+    rx_record.last_first_byte = data[0];
+}
+
+TEST(usart_fake, start_rx_requires_init_and_a_callback)
+{
+    UartConfig config = make_config();
+
+    usart_fake_reset();
+    CHECK(usart_fake.start_rx(on_rx, NULL) == IF_HW_FAULT);
+
+    CHECK(usart_fake.init(&config) == IF_OK);
+    CHECK(usart_fake.start_rx(NULL, NULL) == IF_HW_FAULT);
+    CHECK(usart_fake.start_rx(on_rx, NULL) == IF_OK);
+}
+
+TEST(usart_fake, injected_bytes_reach_the_rx_callback)
+{
+    UartConfig    config = make_config();
+    const uint8_t data[] = {0x41, 0x42, 0x43};
+    int           marker = 0;
+
+    usart_fake_reset();
+    rx_record = (RxRecord){0};
+    CHECK(usart_fake.init(&config) == IF_OK);
+
+    /* Before start_rx(): nowhere to deliver. */
+    CHECK(usart_fake_inject_rx(data, sizeof(data)) == false);
+    CHECK(rx_record.call_count == 0);
+
+    CHECK(usart_fake.start_rx(on_rx, &marker) == IF_OK);
+    CHECK(usart_fake_inject_rx(data, sizeof(data)) == true);
+    CHECK(rx_record.call_count == 1);
+    CHECK(rx_record.last_ctx == &marker);
+    CHECK(rx_record.last_len == sizeof(data));
+    CHECK(rx_record.last_first_byte == 0x41);
+
+    CHECK(usart_fake_inject_rx(NULL, 1U) == false);
+    CHECK(usart_fake_inject_rx(data, 0U) == false);
+}
+
+TEST(usart_fake, reset_stops_reception)
+{
+    UartConfig    config = make_config();
+    const uint8_t data[] = {0x01};
+
+    usart_fake_reset();
+    rx_record = (RxRecord){0};
+    CHECK(usart_fake.init(&config) == IF_OK);
+    CHECK(usart_fake.start_rx(on_rx, NULL) == IF_OK);
+
+    usart_fake_reset();
+    CHECK(usart_fake_inject_rx(data, sizeof(data)) == false);
+    CHECK(rx_record.call_count == 0);
 }

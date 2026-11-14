@@ -17,8 +17,10 @@
 #include "adc_stm32.h"
 #include "board_stm32.h"
 #include "can_stm32.h"
+#include "cli_service.h"
 #include "fatal_stm32.h"
 #include "fault_stm32.h"
+#include "fw_info.h"
 #include "gpio_stm32.h"
 #include "pwm_stm32.h"
 #include "rtos_hooks.h"
@@ -27,12 +29,10 @@
 #include "usart_stm32.h"
 #include "wdg_stm32.h"
 
-/* Placeholder until build info (issue #49) provides the real version. */
-#define FW_VERSION_STRING "unversioned"
-
 /* Boot banner + crash dump from the previous run (issue #45). Kept in RAM
- * so it can be read with a debugger (`print boot_report`) until the logging
- * service (issue #23) exists to send it over the log sink and CAN. */
+ * so it can be read with a debugger (`print boot_report`) and by the debug
+ * CLI (`boot`), until the logging service (issue #23) exists to send it over
+ * the log sink and CAN. */
 static char boot_report[512] __attribute__((used));
 
 /* Driver selection: the one place the firmware names concrete drivers. */
@@ -56,7 +56,8 @@ int main(void)
      * through fatal_stm32 instead of spinning until the watchdog bites. */
     rtos_hooks_install(&fatal_stm32);
     fault_stm32_boot();
-    (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), FW_VERSION_STRING);
+    (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), fw_info_get()->version);
+    cli_set_boot_report(boot_report);
 
     /* SEAM: watchdog init goes here once a service kicks it (#38): it must
      * run before the scheduler starts. Every other driver is brought up by
