@@ -1,12 +1,14 @@
 /**
  * @file usart_stm32.c
- * @brief uart_if implementation for ST HAL's USART2 peripheral.
+ * @brief uart_if implementation for ST HAL's USART2 peripheral (HAL_UART,
+ * asynchronous).
  *
- * Wiring: USART2 in asynchronous mode, TX on SERIAL_TX (PA2) and RX on
- * SERIAL_RX (PA3), AF7 -- the pads come from the .ioc via main.h, so moving
- * them in CubeMX and regenerating follows through here. TX DMA is on DMA1
- * Stream6 Channel4 (the F446's fixed DMA request map). Frame format and
- * baud rate come from UartConfig at init time.
+ * Wiring: USART2_TX -> PA2, USART2_RX -> PA3, AF7; TX DMA on DMA1 Stream6
+ * Channel4, RX DMA on DMA1 Stream5 Channel4 (this board's schematic / the
+ * F446's fixed DMA request map; change here, and only here, if either
+ * moves). Frame format and baud rate come from UartConfig at init time.
+ * The .ioc has USART2 as Asynchronous; CubeMX's generated usart.c is not
+ * compiled, this file owns the peripheral.
  *
  * TX: non-blocking, DMA-driven, with a software queue of pending buffers
  * (issue #16). transmit() either kicks a DMA transfer immediately (nothing
@@ -16,13 +18,18 @@
  * accepted transmit() call. A full queue returns IF_BUSY without blocking
  * or dropping, per the contract.
  *
- * RX is not implemented -- deferred per issue #16 until the debug CLI needs
- * it, at which point it should be DMA + idle-line detection, not byte
- * interrupts. The peripheral already runs in TX_RX mode so adding RX does
- * not change init(). HAL_UART only enables the error interrupts while a
- * receive is running, so ORE/FE/NE are counted (see
- * usart_stm32_*_error_count()) once RX exists; until then the counters
- * stay at zero.
+ * RX (issue #51): DMA in circular mode into rx_buffer, plus idle-line
+ * detection. The HAL reports the write position at three moments: buffer
+ * half full, buffer full (the DMA wraps to the start), and when the line
+ * goes idle after a burst. HAL_UARTEx_RxEventCallback (ISR context) hands
+ * the bytes between the previous position and the new one to the callback
+ * given to start_rx(). No per-byte interrupt, and a single typed character
+ * is delivered one character-time after it arrives.
+ *
+ * Errors: overrun, framing and noise are counted (see
+ * usart_stm32_*_error_count()). With DMA reception running the HAL aborts
+ * the reception on any of them, so HAL_UART_ErrorCallback starts it again:
+ * a noisy line costs the bytes around the error, never the link.
  */
 #include "usart_stm32.h"
 
@@ -31,10 +38,14 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 
-#include "main.h" /* CubeMX-generated per-pin macros: SERIAL_TX_Pin, ... */
 #include "stm32f4xx_hal.h"
 
 #define USART_STM32_TX_PENDING_DEPTH 8U
+
+/* Circular receive buffer. At 115200 baud a byte takes 87 us, so the
+ * half/full events are at least 2.8 ms apart: nothing is overwritten unless
+ * the receive interrupt is held off for longer than that. */
+#define USART_STM32_RX_BUFFER_BYTES 64U
 
 typedef struct {
     const uint8_t   *data;
@@ -45,6 +56,7 @@ typedef struct {
 
 static UART_HandleTypeDef huart2;
 static DMA_HandleTypeDef  hdma_usart2_tx;
+static DMA_HandleTypeDef  hdma_usart2_rx;
 
 static StaticQueue_t pending_tx_queue_struct;
 static uint8_t       pending_tx_queue_storage[USART_STM32_TX_PENDING_DEPTH * sizeof(PendingTx)];
@@ -55,14 +67,22 @@ static QueueHandle_t pending_tx_queue_handle;
 static volatile bool tx_in_flight;
 static PendingTx     current_tx;
 
+/* Receive state. rx_pos is only touched from the USART2 and DMA1 Stream5
+ * interrupts, which share one priority and so never preempt each other. */
+static uint8_t  rx_buffer[USART_STM32_RX_BUFFER_BYTES];
+static size_t   rx_pos; /* next unread index in rx_buffer */
+static UartRxCb rx_cb;
+static void    *rx_ctx;
+static bool     initialized;
+
 static volatile uint32_t overrun_error_count;
 static volatile uint32_t framing_error_count;
 static volatile uint32_t noise_error_count;
 static int32_t           baud_error_permille;
 
 /**
- * @brief Enable the clocks USART2/GPIOA/DMA1 need and configure the TX/RX
- * pads for USART2's alternate function (AF7).
+ * @brief Enable the clocks USART2/GPIOA/DMA1 need and configure PA2/PA3 for
+ * USART2's alternate function (AF7).
  */
 static void stm32_configure_gpio_and_clock(void)
 {
@@ -72,19 +92,25 @@ static void stm32_configure_gpio_and_clock(void)
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_DMA1_CLK_ENABLE();
 
-    gpio_init.Pin       = SERIAL_TX_Pin | SERIAL_RX_Pin;
+    gpio_init.Pin       = GPIO_PIN_2;
     gpio_init.Mode      = GPIO_MODE_AF_PP;
     gpio_init.Pull      = GPIO_NOPULL;
     gpio_init.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
     gpio_init.Alternate = GPIO_AF7_USART2;
-    HAL_GPIO_Init(SERIAL_TX_GPIO_Port, &gpio_init);
+    HAL_GPIO_Init(GPIOA, &gpio_init);
+
+    /* RX idles high. Pull it up so that an unconnected debug port reads as
+     * an idle line instead of floating into a stream of framing errors. */
+    gpio_init.Pin  = GPIO_PIN_3;
+    gpio_init.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIOA, &gpio_init);
 }
 
 /**
  * @brief HAL MSP hook: called by HAL_UART_Init() to bring up everything the
- * peripheral itself doesn't own -- GPIO alternate function, the TX DMA
- * stream, and NVIC priority/enable for both the USART and DMA IRQs.
- * @param huart   handle being initialised; ignored unless it is USART2
+ * peripheral itself doesn't own -- GPIO alternate function, the TX and RX
+ * DMA streams, and NVIC priority/enable for the USART and DMA IRQs.
+ * @param huart  handle being initialised; ignored unless it is USART2
  */
 void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 {
@@ -107,10 +133,28 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
     (void)HAL_DMA_Init(&hdma_usart2_tx);
     __HAL_LINKDMA(huart, hdmatx, hdma_usart2_tx);
 
+    /* Circular: the DMA wraps to the start of rx_buffer by itself, so
+     * reception never has to be re-armed between bursts. */
+    hdma_usart2_rx.Instance                 = DMA1_Stream5;
+    hdma_usart2_rx.Init.Channel             = DMA_CHANNEL_4;
+    hdma_usart2_rx.Init.Direction           = DMA_PERIPH_TO_MEMORY;
+    hdma_usart2_rx.Init.PeriphInc           = DMA_PINC_DISABLE;
+    hdma_usart2_rx.Init.MemInc              = DMA_MINC_ENABLE;
+    hdma_usart2_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+    hdma_usart2_rx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+    hdma_usart2_rx.Init.Mode                = DMA_CIRCULAR;
+    hdma_usart2_rx.Init.Priority            = DMA_PRIORITY_MEDIUM;
+    hdma_usart2_rx.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
+    (void)HAL_DMA_Init(&hdma_usart2_rx);
+    __HAL_LINKDMA(huart, hdmarx, hdma_usart2_rx);
+
     /* Priorities must be numerically >= configLIBRARY_MAX_SYSCALL_INTERRUPT_
-     * PRIORITY so these ISRs are allowed to call FromISR FreeRTOS APIs. */
+     * PRIORITY so these ISRs are allowed to call FromISR FreeRTOS APIs. All
+     * three share one priority, so none of them preempts another. */
     HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
+    HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
     HAL_NVIC_SetPriority(USART2_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(USART2_IRQn);
 }
@@ -118,7 +162,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 /**
  * @brief HAL MSP hook: called by HAL_UART_DeInit() to undo everything
  * HAL_UART_MspInit() set up -- NVIC, DMA, GPIO, and the peripheral clock.
- * @param huart   handle being de-initialised; ignored unless it is USART2
+ * @param huart  handle being de-initialised; ignored unless it is USART2
  */
 /* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_uart.h */
 void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
@@ -129,14 +173,17 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
 
     HAL_NVIC_DisableIRQ(USART2_IRQn);
     HAL_NVIC_DisableIRQ(DMA1_Stream6_IRQn);
+    HAL_NVIC_DisableIRQ(DMA1_Stream5_IRQn);
     (void)HAL_DMA_DeInit(&hdma_usart2_tx);
-    HAL_GPIO_DeInit(SERIAL_TX_GPIO_Port, SERIAL_TX_Pin | SERIAL_RX_Pin);
+    (void)HAL_DMA_DeInit(&hdma_usart2_rx);
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_2 | GPIO_PIN_3);
     __HAL_RCC_USART2_CLK_DISABLE();
 }
 
 /**
  * @brief USART2 interrupt vector: hands off to the HAL, which decodes the
- * cause and dispatches to the matching HAL_UART_*Callback().
+ * cause (transmit complete, idle line, error) and dispatches to the matching
+ * HAL_UART*Callback().
  */
 void USART2_IRQHandler(void)
 {
@@ -154,6 +201,16 @@ void DMA1_Stream6_IRQHandler(void)
 }
 
 /**
+ * @brief DMA1 Stream5 interrupt vector (USART2 RX): hands off to the HAL,
+ * which calls HAL_UARTEx_RxEventCallback() when rx_buffer is half full and
+ * when it is full.
+ */
+void DMA1_Stream5_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(&hdma_usart2_rx);
+}
+
+/**
  * @brief Pull the next pending buffer off the queue, if any, and start its
  * DMA transfer. Caller must already hold tx_in_flight == false and be
  * calling from ISR context (uses the FromISR queue API).
@@ -166,16 +223,16 @@ static void stm32_start_next_tx_from_isr(BaseType_t *higher_priority_task_woken)
     if (xQueueReceiveFromISR(pending_tx_queue_handle, &current_tx, higher_priority_task_woken)
         == pdTRUE) {
         tx_in_flight = true;
-        (void)HAL_UART_Transmit_DMA(&huart2, (uint8_t *)current_tx.data, (uint16_t)current_tx.size);
+        (void)HAL_UART_Transmit_DMA(&huart2, current_tx.data, (uint16_t)current_tx.size);
     }
 }
 
 /**
- * @brief HAL callback: fires once the DMA has fully clocked out the current
- * transfer. Reports completion to that buffer's own on_complete (exactly
+ * @brief HAL callback: fires once the current transfer has fully left the
+ * wire. Reports completion to that buffer's own on_complete (exactly
  * once, per the uart_if.h contract) and immediately starts the next queued
  * transfer, if any.
- * @param huart   handle that completed; ignored unless it is USART2
+ * @param huart  handle that completed; ignored unless it is USART2
  */
 /* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_uart.h */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
@@ -200,12 +257,76 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 }
 
 /**
- * @brief HAL callback: fires on any USART/DMA error. Counts overrun/
- * framing/noise errors (see usart_stm32_*_error_count()), and if the fault
- * was on the DMA side -- meaning the in-flight transfer is dead and will
- * never complete on its own -- recovers by starting the next queued
- * transfer instead of leaving TX wedged.
- * @param huart   handle that faulted; ignored unless it is USART2
+ * @brief Start (or restart) circular DMA reception with idle-line events.
+ * @return true if the HAL accepted it
+ */
+static bool stm32_arm_rx(void)
+{
+    rx_pos = 0U;
+    return HAL_UARTEx_ReceiveToIdle_DMA(&huart2, rx_buffer, (uint16_t)sizeof(rx_buffer)) == HAL_OK;
+}
+
+/**
+ * @brief Hand rx_buffer[from, to) to the receive callback, if there is one
+ * and the range is not empty.
+ * @param from  first index to deliver
+ * @param to    one past the last index to deliver
+ */
+static void stm32_deliver_rx(size_t from, size_t to)
+{
+    if ((rx_cb != NULL) && (to > from)) {
+        rx_cb(rx_ctx, &rx_buffer[from], to - from);
+    }
+}
+
+/**
+ * @brief HAL callback: the DMA write position in rx_buffer moved. Fires when
+ * the buffer is half full, when it is full (the DMA then wraps to index 0),
+ * and when the line goes idle after a burst. Delivers every byte between
+ * the last delivered position and the DMA's current one, exactly once.
+ *
+ * The position is read from the DMA counter here, not taken from @p size.
+ * @p size is the position at the moment the event was raised; if a second
+ * event was already pending (the buffer wrapped while the idle interrupt was
+ * being served), acting on the older number would deliver bytes of the
+ * previous lap a second time.
+ * @param huart  handle that received; ignored unless it is USART2
+ * @param size   position when the event was raised; unused, see above
+ */
+/* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_uart.h */
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
+{
+    size_t remaining;
+    size_t pos;
+
+    (void)size;
+    if (huart->Instance != USART2) {
+        return;
+    }
+
+    /* The counter runs from sizeof(rx_buffer) down to 1 and reloads, so the
+     * write position is 0..sizeof(rx_buffer)-1. */
+    remaining = (size_t)__HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
+    if ((remaining == 0U) || (remaining > sizeof(rx_buffer))) {
+        return; /* cannot happen; never index past the end */
+    }
+    pos = sizeof(rx_buffer) - remaining;
+
+    if (pos < rx_pos) {
+        /* The DMA wrapped: finish the old lap, then start the new one. */
+        stm32_deliver_rx(rx_pos, sizeof(rx_buffer));
+        rx_pos = 0U;
+    }
+    stm32_deliver_rx(rx_pos, pos);
+    rx_pos = pos;
+}
+
+/**
+ * @brief HAL callback: fires on any UART/DMA error. Counts overrun/framing/
+ * noise errors (see usart_stm32_*_error_count()) and recovers both
+ * directions, because the HAL stops them: a DMA-side error kills the
+ * in-flight transmit, and any error during DMA reception aborts reception.
+ * @param huart  handle that faulted; ignored unless it is USART2
  */
 /* cppcheck-suppress constParameterPointer ; signature fixed by stm32f4xx_hal_uart.h */
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
@@ -238,6 +359,12 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
         stm32_start_next_tx_from_isr(&higher_priority_task_woken);
     }
 
+    /* The HAL has aborted reception by the time this runs. Bytes still in
+     * rx_buffer are dropped with it: after a line error they are suspect. */
+    if ((rx_cb != NULL) && (huart->RxState == HAL_UART_STATE_READY)) {
+        (void)stm32_arm_rx();
+    }
+
     portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
@@ -249,11 +376,11 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 static uint32_t hal_parity(UartParity parity)
 {
     switch (parity) {
-        case UART_PARITY_MODE_EVEN:
+        case UART_IF_PARITY_EVEN:
             return UART_PARITY_EVEN;
-        case UART_PARITY_MODE_ODD:
+        case UART_IF_PARITY_ODD:
             return UART_PARITY_ODD;
-        case UART_PARITY_MODE_NONE:
+        case UART_IF_PARITY_NONE:
         default:
             return UART_PARITY_NONE;
     }
@@ -271,35 +398,38 @@ static uint32_t hal_stop_bits(UartStopBits stop_bits)
 
 /**
  * @brief Translate the contract's parity-exclusive data_bits into the HAL's
- * UART_WORDLENGTH_*, which counts the parity bit as part of the frame --
- * so 8 data bits with parity enabled needs a 9-bit HAL word length.
+ * UART_WORDLENGTH_*, which counts the parity bit as part of the frame: 8
+ * data bits plus a parity bit is a 9-bit HAL word.
  * @param data_bits  bits per frame requested via UartConfig, excluding parity
+ * @param parity     parity mode requested via UartConfig
  */
-static uint32_t hal_word_length(uint8_t data_bits)
+static uint32_t hal_word_length(uint8_t data_bits, UartParity parity)
 {
-    return (data_bits >= 9U) ? UART_WORDLENGTH_9B : UART_WORDLENGTH_8B;
+    const uint32_t frame_bits = (uint32_t)data_bits + ((parity == UART_IF_PARITY_NONE) ? 0U : 1U);
+
+    return (frame_bits >= 9U) ? UART_WORDLENGTH_9B : UART_WORDLENGTH_8B;
 }
 
 /**
  * @brief Read back the BRR the HAL actually programmed and decode the baud
  * rate it produces, rather than re-deriving ST's rounding independently.
- * init() selects 16x oversampling (OVER8=0), so BRR holds 16*USARTDIV
- * directly (mantissa in bits[15:4], 4-bit fraction in bits[3:0]) and
- * baud = pclk / BRR.
+ * init() selects 16x oversampling (OVER8=0), where BRR holds 16 * USARTDIV
+ * as a 12-bit mantissa and a 4-bit fraction: read as one integer it is the
+ * clock divider itself, so baud = pclk / BRR.
  * Stores the result in baud_error_permille for usart_stm32_baud_error_permille().
  * @param configured_baud_bps  the baud rate that was requested via init()
  */
 static void update_baud_error(uint32_t configured_baud_bps)
 {
-    uint32_t pclk_hz      = HAL_RCC_GetPCLK1Freq();
-    uint32_t usartdiv_x16 = huart2.Instance->BRR & 0xFFFFU;
+    uint32_t pclk_hz = HAL_RCC_GetPCLK1Freq();
+    uint32_t divider = huart2.Instance->BRR & 0xFFFFU;
 
-    if (usartdiv_x16 == 0U || configured_baud_bps == 0U) {
+    if (divider == 0U || configured_baud_bps == 0U) {
         baud_error_permille = 0;
         return;
     }
 
-    uint32_t actual_baud_bps = pclk_hz / usartdiv_x16;
+    uint32_t actual_baud_bps = pclk_hz / divider;
     int64_t  error_x1000     = ((int64_t)actual_baud_bps - (int64_t)configured_baud_bps) * 1000;
     baud_error_permille      = (int32_t)(error_x1000 / (int64_t)configured_baud_bps);
 }
@@ -307,7 +437,7 @@ static void update_baud_error(uint32_t configured_baud_bps)
 /**
  * @brief uart_if::init -- program USART2 for the requested frame format and
  * baud rate, record the resulting baud error, and allocate the pending-TX
- * queue.
+ * queue. Reception stays off until start_rx().
  * @param config  frame format and baud rate; NULL or a zero baud rate fails
  * @return #IF_OK on success, #IF_HW_FAULT if @p config is invalid or the
  *         HAL rejected the setup
@@ -318,9 +448,17 @@ static IfStatus stm32_init(const UartConfig *config)
         return IF_HW_FAULT;
     }
 
+    /* A re-init stops a running reception before the callback is cleared. */
+    if (initialized) {
+        (void)HAL_UART_AbortReceive(&huart2);
+    }
+    initialized = false;
+    rx_cb       = NULL;
+    rx_ctx      = NULL;
+
     huart2.Instance          = USART2;
     huart2.Init.BaudRate     = config->baud_rate_bps;
-    huart2.Init.WordLength   = hal_word_length(config->data_bits);
+    huart2.Init.WordLength   = hal_word_length(config->data_bits, config->parity);
     huart2.Init.StopBits     = hal_stop_bits(config->stop_bits);
     huart2.Init.Parity       = hal_parity(config->parity);
     huart2.Init.Mode         = UART_MODE_TX_RX;
@@ -343,6 +481,7 @@ static IfStatus stm32_init(const UartConfig *config)
     overrun_error_count = 0U;
     framing_error_count = 0U;
     noise_error_count   = 0U;
+    initialized         = true;
 
     return IF_OK;
 }
@@ -359,8 +498,8 @@ static IfStatus stm32_init(const UartConfig *config)
  *                     sent; may be NULL to ignore completion
  * @param ctx          opaque pointer passed back to @p on_complete
  * @return #IF_OK if the transfer started or was queued, #IF_BUSY if the
- *         pending queue is full, #IF_HW_FAULT on bad arguments or if the
- *         HAL rejected starting the DMA transfer
+ *         pending queue is full, #IF_HW_FAULT on bad arguments, before
+ *         init(), or if the HAL rejected starting the DMA transfer
  */
 static IfStatus
 stm32_transmit(const uint8_t *data, size_t size, UartTxCompleteCb on_complete, void *ctx)
@@ -368,7 +507,8 @@ stm32_transmit(const uint8_t *data, size_t size, UartTxCompleteCb on_complete, v
     PendingTx pending           = {.data = data, .size = size, .cb = on_complete, .ctx = ctx};
     bool      start_immediately = false;
 
-    if (data == NULL || size == 0U) {
+    /* The HAL takes a 16-bit length; refuse what it cannot send whole. */
+    if (!initialized || data == NULL || size == 0U || size > UINT16_MAX) {
         return IF_HW_FAULT;
     }
 
@@ -381,8 +521,7 @@ stm32_transmit(const uint8_t *data, size_t size, UartTxCompleteCb on_complete, v
     taskEXIT_CRITICAL();
 
     if (start_immediately) {
-        if (HAL_UART_Transmit_DMA(&huart2, (uint8_t *)current_tx.data, (uint16_t)current_tx.size)
-            != HAL_OK) {
+        if (HAL_UART_Transmit_DMA(&huart2, current_tx.data, (uint16_t)current_tx.size) != HAL_OK) {
             taskENTER_CRITICAL();
             tx_in_flight = false;
             taskEXIT_CRITICAL();
@@ -397,9 +536,40 @@ stm32_transmit(const uint8_t *data, size_t size, UartTxCompleteCb on_complete, v
     return IF_OK;
 }
 
+/**
+ * @brief uart_if::start_rx -- start circular DMA reception with idle-line
+ * detection. Every chunk of received bytes is handed to @p on_rx from ISR
+ * context (HAL_UARTEx_RxEventCallback) until the next init().
+ * @param on_rx  receives each chunk; must not be NULL
+ * @param ctx    opaque pointer passed back to @p on_rx
+ * @return #IF_OK if reception is running, #IF_HW_FAULT on a NULL @p on_rx,
+ *         before init(), or if the HAL rejected starting the DMA
+ */
+static IfStatus stm32_start_rx(UartRxCb on_rx, void *ctx)
+{
+    if (!initialized || on_rx == NULL) {
+        return IF_HW_FAULT;
+    }
+
+    /* A second start_rx() replaces the callback; stop the running reception
+     * first so the callback never changes under the receive interrupt. */
+    if (rx_cb != NULL) {
+        (void)HAL_UART_AbortReceive(&huart2);
+    }
+    rx_ctx = ctx;
+    rx_cb  = on_rx;
+
+    if (!stm32_arm_rx()) {
+        rx_cb = NULL;
+        return IF_HW_FAULT;
+    }
+    return IF_OK;
+}
+
 const UartIf usart_stm32 = {
     .init     = stm32_init,
     .transmit = stm32_transmit,
+    .start_rx = stm32_start_rx,
 };
 
 /**

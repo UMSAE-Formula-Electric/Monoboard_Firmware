@@ -25,6 +25,9 @@ static size_t            pending_head;
 static size_t            pending_tail;
 static size_t            pending_count;
 
+static UartRxCb rx_cb;
+static void    *rx_ctx;
+
 static bool initialized;
 static bool force_busy_next;
 static bool force_hw_fault_next;
@@ -81,9 +84,20 @@ fake_transmit(const uint8_t *data, size_t size, UartTxCompleteCb on_complete, vo
     return IF_OK;
 }
 
+static IfStatus fake_start_rx(UartRxCb on_rx, void *ctx)
+{
+    if (!initialized || on_rx == NULL) {
+        return IF_HW_FAULT;
+    }
+    rx_cb  = on_rx;
+    rx_ctx = ctx;
+    return IF_OK;
+}
+
 const UartIf usart_fake = {
     .init     = fake_init,
     .transmit = fake_transmit,
+    .start_rx = fake_start_rx,
 };
 
 void usart_fake_reset(void)
@@ -97,6 +111,8 @@ void usart_fake_reset(void)
     pending_head        = 0U;
     pending_tail        = 0U;
     pending_count       = 0U;
+    rx_cb               = NULL;
+    rx_ctx              = NULL;
     initialized         = false;
     force_busy_next     = false;
     force_hw_fault_next = false;
@@ -166,4 +182,13 @@ size_t usart_fake_pop_tx(uint8_t *out, size_t max_size)
 size_t usart_fake_tx_byte_count(void)
 {
     return tx_bytes_count;
+}
+
+bool usart_fake_inject_rx(const uint8_t *data, size_t size)
+{
+    if (rx_cb == NULL || data == NULL || size == 0U) {
+        return false;
+    }
+    rx_cb(rx_ctx, data, size);
+    return true;
 }
