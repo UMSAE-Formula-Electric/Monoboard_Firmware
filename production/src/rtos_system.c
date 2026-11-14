@@ -30,6 +30,7 @@
 
 #include "FreeRTOS.h"
 #include "boot_service.h"
+#include "cli_service.h"
 #include "service_stubs.h"
 #include "task.h"
 
@@ -55,6 +56,7 @@
 #define IMD_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 2U))
 #define LOGGING_PRIORITY    ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 #define HEALTHRUN_PRIORITY  ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
+#define CLI_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 
 #define CAN_ROUTER_PERIOD_MS 5U
 #define PEDAL_PERIOD_MS      1U
@@ -64,6 +66,7 @@
 #define LOGGING_PERIOD_MS    10U
 #define HEALTHRUN_PERIOD_MS  1000U
 #define BOOT_PERIOD_MS       500U
+#define CLI_PERIOD_MS        20U
 
 #define CAN_ROUTER_STACK_WORDS 256U
 #define PEDAL_STACK_WORDS      256U
@@ -73,6 +76,11 @@
 #define LOGGING_STACK_WORDS    256U
 #define HEALTHRUN_STACK_WORDS  256U
 #define BOOT_STACK_WORDS       256U
+#define CLI_STACK_WORDS        512U /* handlers format text with vsnprintf */
+
+/* Debug CLI link (issue #51): 8 data bits, no parity, 1 stop bit.
+ * PLACEHOLDER baud rate until the team confirms one. */
+#define CLI_UART_BAUD_BPS 115200U
 
 /* -------------------------------------------------------------------------
  * Static storage
@@ -101,9 +109,13 @@ static StackType_t  healthrun_stack[HEALTHRUN_STACK_WORDS];
 static StaticTask_t boot_tcb;
 static StackType_t  boot_stack[BOOT_STACK_WORDS];
 
+static StaticTask_t cli_tcb;
+static StackType_t  cli_stack[CLI_STACK_WORDS];
+
 /* Service contexts. rtos_system_create() fills in each one's drivers (and,
  * later, its queues) before creating the task that uses it. */
 static BootService boot_svc;
+static CliService  cli_svc;
 
 /* -------------------------------------------------------------------------
  * Wiring
@@ -112,10 +124,12 @@ static BootService boot_svc;
 /* A service's init and step take its context as void * so they slot in here
  * directly, with no adapter per service.
  *
- * SEAM: CAN and the UART get init hooks like the boot service's, in the
- * services that own them, once their bitrate and baud rate are confirmed;
- * PWM once it has a channel plan. The ADC needs none (its service calls
- * start_scan). */
+ * The UART is brought up by the debug CLI's init hook, the service that
+ * owns it.
+ *
+ * SEAM: CAN gets an init hook like the boot service's, in the service that
+ * owns it, once its bitrate is confirmed; PWM once it has a channel plan. The ADC needs none (its
+ * service calls start_scan). */
 typedef struct {
     void *ctx;                   /* the service's context, handed to init and step */
     IfStatus (*init)(void *ctx); /* once, in the task, before the first step; may be NULL */
@@ -158,6 +172,21 @@ static const PeriodicTask boot_task = {
     .step      = vBootServiceStep,
     .period_ms = BOOT_PERIOD_MS,
 };
+static const PeriodicTask cli_task = {
+    .ctx       = &cli_svc,
+    .init      = cli_service_init,
+    .step      = vCliServiceStep,
+    .period_ms = CLI_PERIOD_MS,
+};
+
+/* Fail closed: nothing can tell the CLI that the vehicle is parked with the
+ * tractive system off until the vehicle state machine exists (#25), so every
+ * CLI write command is refused. Replace this with the state machine's query
+ * when #25 lands; do not make it return true to "unblock" a command. */
+static bool cli_is_safe_state(void)
+{
+    return false;
+}
 
 /* Body shared by every periodic service. vTaskDelayUntil keeps the period
  * fixed: the step's own run time does not stretch it. */
@@ -191,6 +220,14 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
 
     /* Inject each service's drivers before its task can run. */
     boot_svc.gpio = drivers->gpio;
+
+    cli_svc.uart                      = drivers->uart;
+    cli_svc.uart_config.baud_rate_bps = CLI_UART_BAUD_BPS;
+    cli_svc.uart_config.data_bits     = 8U;
+    cli_svc.uart_config.parity        = UART_IF_PARITY_NONE;
+    cli_svc.uart_config.stop_bits     = UART_STOP_BITS_1;
+    cli_svc.ports.is_safe_state       = cli_is_safe_state;
+    cli_svc.ports.gpio                = drivers->gpio;
 
     if (xTaskCreateStatic(periodic_task, "boot", (configSTACK_DEPTH_TYPE)BOOT_STACK_WORDS,
                           (void *)&boot_task, BOOT_PRIORITY, boot_stack, &boot_tcb)
@@ -238,6 +275,12 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
     if (xTaskCreateStatic(periodic_task, "healthrun", (configSTACK_DEPTH_TYPE)HEALTHRUN_STACK_WORDS,
                           (void *)&healthrun_task, HEALTHRUN_PRIORITY, healthrun_stack,
                           &healthrun_tcb)
+        == NULL) {
+        return false;
+    }
+
+    if (xTaskCreateStatic(periodic_task, "cli", (configSTACK_DEPTH_TYPE)CLI_STACK_WORDS,
+                          (void *)&cli_task, CLI_PRIORITY, cli_stack, &cli_tcb)
         == NULL) {
         return false;
     }
