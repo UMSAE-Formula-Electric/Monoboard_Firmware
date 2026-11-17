@@ -23,7 +23,8 @@
 /** The concrete driver behind each interface, chosen by the calling main. */
 typedef struct {
     const AdcIf  *adc;
-    const CanIf  *can;
+    const CanIf  *main_can;   /* main vehicle bus */
+    const CanIf  *sensor_can; /* sensor bus */
     const GpioIf *gpio;
     const PwmIf  *pwm;
     const UartIf *uart;
