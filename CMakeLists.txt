@@ -198,6 +198,7 @@ target_include_directories(interfaces INTERFACE ${PROD}/interfaces)
 add_library(proto STATIC
         #proto/<filename>.c
         ${PROD}/proto/stub.c
+        ${PROD}/proto/can_heartbeat.c
 )
 target_include_directories(proto PUBLIC ${PROD}/proto)
 target_link_libraries(proto
@@ -353,6 +354,10 @@ if(PLATFORM_MCU)
             freertos_kernel stm32_hal
             warnings
             m c)
+    # CAN router heartbeat on the sensor bus (rtos_system.c), Debug only:
+    # release images never put a bench-test frame on the car's bus.
+    target_compile_definitions(${PROJECT_NAME}.elf PRIVATE
+            MONOBOARD_BUS_HEARTBEAT=$<IF:$<CONFIG:Debug>,1,0>)
     target_link_options(${PROJECT_NAME}.elf PRIVATE
             -T${LINKER_SCRIPT}          # absolute: the linker resolves relative
             # paths against the BUILD dir, so this
@@ -394,6 +399,8 @@ else()
             drivers_fake                # drivers_stm32 deliberately NOT here
             freertos_kernel
             warnings)
+    target_compile_definitions(monoboard_sim PRIVATE
+            MONOBOARD_BUS_HEARTBEAT=$<IF:$<CONFIG:Debug>,1,0>)
     add_test(NAME desktop_sim_smoke
             COMMAND monoboard_sim --duration-ms 500)
     set_tests_properties(desktop_sim_smoke PROPERTIES

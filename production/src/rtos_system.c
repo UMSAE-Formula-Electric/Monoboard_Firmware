@@ -30,6 +30,7 @@
 
 #include "FreeRTOS.h"
 #include "boot_service.h"
+#include "can_ids.h"
 #include "can_router_service.h"
 #include "cli_service.h"
 #include "service_stubs.h"
@@ -83,6 +84,15 @@
  * APB1 clock that is an exact prescaler of 2 (see can_stm32.c). */
 #define CAN_MAIN_BITRATE_BPS   500000U
 #define CAN_SENSOR_BITRATE_BPS 500000U
+
+/* Debug builds: the router sends a heartbeat (can_heartbeat.h) on the
+ * sensor bus at this period, to prove its TX path on a bench. CMake sets
+ * MONOBOARD_BUS_HEARTBEAT to 1 for Debug and 0 for every other build. */
+#define CAN_HEARTBEAT_PERIOD_MS 1000U
+
+#if (CAN_HEARTBEAT_PERIOD_MS % CAN_ROUTER_PERIOD_MS) != 0U
+#    error "CAN_HEARTBEAT_PERIOD_MS must be a whole multiple of CAN_ROUTER_PERIOD_MS"
+#endif
 
 /* -------------------------------------------------------------------------
  * Static storage
@@ -237,6 +247,12 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
     can_router_svc.buses[CAN_ROUTER_BUS_SENSOR].config.loopback    = false;
     can_router_svc.routes                                          = NULL;
     can_router_svc.route_count                                     = 0U;
+#if defined(MONOBOARD_BUS_HEARTBEAT) && (MONOBOARD_BUS_HEARTBEAT == 1)
+    can_router_svc.heartbeat.enabled     = true;
+    can_router_svc.heartbeat.bus         = CAN_ROUTER_BUS_SENSOR;
+    can_router_svc.heartbeat.can_id      = CAN_ID_SENS_HEARTBEAT;
+    can_router_svc.heartbeat.every_steps = CAN_HEARTBEAT_PERIOD_MS / CAN_ROUTER_PERIOD_MS;
+#endif
 
     if (xTaskCreateStatic(periodic_task, "boot", (configSTACK_DEPTH_TYPE)BOOT_STACK_WORDS,
                           (void *)&boot_task, BOOT_PRIORITY, boot_stack, &boot_tcb)

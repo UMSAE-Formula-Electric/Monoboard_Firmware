@@ -32,6 +32,12 @@
  * already queued are kept, so older frames are never displaced by newer
  * ones. Callers must not retry in a loop.
  *
+ * Heartbeat. Optionally (CanRouterService::heartbeat, on in Debug builds
+ * only) the router queues its own heartbeat frame (can_heartbeat.h) every
+ * N steps, through can_router_send() like any producer. On a bench, a
+ * steady heartbeat with a gap-free sequence on the analyser proves the
+ * router task transmits; the `can` CLI command shows the counters.
+ *
  * SEAM: a TX drop and the bus error states (error-warning, error-passive,
  * bus-off) become fault sources once the fault service exists (#59). CanIf
  * has no error-state query yet; bus-off recovery (a backoff state machine,
@@ -97,14 +103,24 @@ typedef struct {
     CanConfig    config; /**< bit rate and loopback selection for it */
 } CanRouterBusConfig;
 
+/** Optional heartbeat the router sends itself (see the file comment).
+ *  All zero means off. */
+typedef struct {
+    bool         enabled;     /**< false: no heartbeat, the rest is ignored */
+    CanRouterBus bus;         /**< bus to send it on */
+    uint32_t     can_id;      /**< standard 11-bit ID, from can_ids.h */
+    uint32_t     every_steps; /**< router steps between frames; not 0 */
+} CanRouterHeartbeat;
+
 /** CAN router context. The composition root owns the storage and fills in
  *  every field before the task that runs can_router_service_init() is
  *  created. */
 typedef struct {
     CanRouterBusConfig buses[CAN_ROUTER_BUS_COUNT]; /**< indexed by CanRouterBus */
-    const CanRoute    *routes; /**< routing table, typically const in flash; may be
-                                    NULL if @c route_count is 0 */
-    size_t route_count;        /**< entries in @c routes */
+    const CanRoute    *routes;      /**< routing table, typically const in flash; may be
+                                         NULL if @c route_count is 0 */
+    size_t             route_count; /**< entries in @c routes */
+    CanRouterHeartbeat heartbeat;   /**< off unless @c heartbeat.enabled */
 } CanRouterService;
 
 /** Per-bus counters. They only grow, and wrap at UINT32_MAX. */
@@ -124,7 +140,9 @@ typedef struct {
  * @return #IF_OK, the CAN driver's init() error, or #IF_HW_FAULT if
  *         @p ctx, any bus's @c can, or a route's @c handler is NULL, a route
  *         names a bus outside CanRouterBus, @c routes is NULL with a
- *         non-zero @c route_count, or a TX queue could not be created
+ *         non-zero @c route_count, an enabled heartbeat has a bad bus, an
+ *         ID that does not fit in 11 bits or @c every_steps of 0, or a TX
+ *         queue could not be created
  */
 IfStatus can_router_service_init(void *ctx);
 
@@ -149,8 +167,9 @@ IfStatus can_router_send(CanRouterBus bus, const CanFrame *frame);
  */
 bool can_router_get_stats(CanRouterBus bus, CanRouterStats *out);
 
-/** One period of the router: drain each bus's inbox and dispatch, then
- *  drain each TX queue into the mailboxes. Run from the periodic task in
+/** One period of the router: drain each bus's inbox and dispatch, queue
+ *  the heartbeat if one is due, then drain each TX queue into the
+ *  mailboxes. Run from the periodic task in
  *  rtos_system.c.
  *  @param ctx  the CanRouterService passed to can_router_service_init() */
 void vCANRouterServiceStep(void *ctx);

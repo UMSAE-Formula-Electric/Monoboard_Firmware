@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "can_fake.h"
+#include "can_heartbeat.h"
 #include "can_router_service.h"
 #include "test_framework.h"
 
@@ -387,4 +388,127 @@ TEST(can_router_service, step_without_context_does_nothing)
     CHECK(motor_sink.calls == 0U);
     vCANRouterServiceStep(&svc);
     CHECK(motor_sink.calls == 1U);
+}
+
+/* --- heartbeat --------------------------------------------------------- */
+
+static void enable_heartbeat(uint32_t every_steps)
+{
+    svc.heartbeat.enabled     = true;
+    svc.heartbeat.bus         = CAN_ROUTER_BUS_SENSOR;
+    svc.heartbeat.can_id      = 0x7F0U;
+    svc.heartbeat.every_steps = every_steps;
+}
+
+TEST(can_router_service, heartbeat_is_off_by_default)
+{
+    uint32_t i;
+
+    CHECK(start());
+    for (i = 0U; i < 10U; i++) {
+        vCANRouterServiceStep(&svc);
+    }
+    CHECK(can_fake_tx_count(&sensor_can_fake) == 0U);
+    CHECK(can_fake_tx_count(&main_can_fake) == 0U);
+}
+
+TEST(can_router_service, init_rejects_bad_heartbeat)
+{
+    wire();
+    enable_heartbeat(0U);
+    CHECK(can_router_service_init(&svc) == IF_HW_FAULT);
+
+    wire();
+    enable_heartbeat(1U);
+    svc.heartbeat.can_id = 0x800U;
+    CHECK(can_router_service_init(&svc) == IF_HW_FAULT);
+
+    wire();
+    enable_heartbeat(1U);
+    svc.heartbeat.bus = CAN_ROUTER_BUS_COUNT;
+    CHECK(can_router_service_init(&svc) == IF_HW_FAULT);
+
+    /* Disabled, the other fields are not checked. */
+    wire();
+    svc.heartbeat.can_id = 0x800U;
+    CHECK(can_router_service_init(&svc) == IF_OK);
+}
+
+TEST(can_router_service, heartbeat_goes_out_every_n_steps_with_a_sequence)
+{
+    uint32_t step;
+    uint32_t sent = 0U;
+    CanFrame out;
+    uint8_t  sequence;
+    uint32_t uptime;
+
+    CHECK(start());
+    enable_heartbeat(4U);
+    CHECK(can_router_service_init(&svc) == IF_OK);
+
+    /* Steps 0, 4 and 8 each put one heartbeat on the bus that same step. */
+    for (step = 0U; step < 12U; step++) {
+        vCANRouterServiceStep(&svc);
+        if (step % 4U == 0U) {
+            CHECK(can_fake_pop_tx(&sensor_can_fake, &out));
+            CHECK(out.id == 0x7F0U);
+            CHECK(can_heartbeat_decode(&out, &sequence, &uptime));
+            CHECK(sequence == (uint8_t)sent);
+            sent++;
+        }
+        CHECK(can_fake_tx_count(&sensor_can_fake) == 0U);
+    }
+    CHECK(sent == 3U);
+    CHECK(can_fake_tx_count(&main_can_fake) == 0U); /* only its own bus */
+    CHECK(stats(CAN_ROUTER_BUS_SENSOR).tx_frames == 3U);
+}
+
+TEST(can_router_service, heartbeat_shares_the_queue_with_producers)
+{
+    const CanFrame frame = std_frame(0x123U, 0U);
+    CanFrame       out;
+
+    CHECK(start());
+    enable_heartbeat(100U);
+    CHECK(can_router_service_init(&svc) == IF_OK);
+
+    /* Queued before the step: it goes out first, then the heartbeat. */
+    CHECK(can_router_send(CAN_ROUTER_BUS_SENSOR, &frame) == IF_OK);
+    vCANRouterServiceStep(&svc);
+    CHECK(can_fake_pop_tx(&sensor_can_fake, &out) && out.id == 0x123U);
+    CHECK(can_fake_pop_tx(&sensor_can_fake, &out) && out.id == 0x7F0U);
+}
+
+TEST(can_router_service, refused_heartbeat_is_counted_and_leaves_a_gap)
+{
+    const CanFrame filler = std_frame(0x123U, 0U);
+    CanFrame       out;
+    bool           seen  = false;
+    uint8_t        first = 0U;
+    uint32_t       i;
+
+    CHECK(start());
+    enable_heartbeat(1U);
+    CHECK(can_router_service_init(&svc) == IF_OK);
+
+    /* A full sensor-bus queue refuses heartbeat 0. */
+    for (i = 0U; i < CAN_ROUTER_TX_QUEUE_DEPTH; i++) {
+        CHECK(can_router_send(CAN_ROUTER_BUS_SENSOR, &filler) == IF_OK);
+    }
+    vCANRouterServiceStep(&svc);
+    CHECK(stats(CAN_ROUTER_BUS_SENSOR).tx_dropped == 1U);
+
+    /* Keep the "bus" draining until a heartbeat comes out: it is number 1,
+     * so the refused one shows as a gap. */
+    for (i = 0U; i < 8U && !seen; i++) {
+        while (can_fake_pop_tx(&sensor_can_fake, &out)) {
+            if (!seen && out.id == 0x7F0U) {
+                CHECK(can_heartbeat_decode(&out, &first, NULL));
+                seen = true;
+            }
+        }
+        vCANRouterServiceStep(&svc);
+    }
+    CHECK(seen);
+    CHECK(first == 1U);
 }

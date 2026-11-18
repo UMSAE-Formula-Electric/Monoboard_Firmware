@@ -13,8 +13,12 @@
 #include <string.h>
 
 #include "FreeRTOS.h"
+#include "can_heartbeat.h"
 #include "queue.h"
 #include "task.h"
+#include "time_if.h"
+
+#define CAN_ROUTER_MAX_STD_ID 0x7FFU
 
 typedef struct {
     const CanIf   *can;
@@ -28,6 +32,10 @@ static RouterBus router_buses[CAN_ROUTER_BUS_COUNT];
 
 /* Read by producers in other tasks: false until init has finished. */
 static volatile bool router_ready;
+
+/* Heartbeat state, router task only. */
+static uint32_t heartbeat_countdown; /* steps left until the next one */
+static uint8_t  heartbeat_sequence;
 
 static bool bus_is_valid(CanRouterBus bus)
 {
@@ -52,6 +60,11 @@ static bool context_is_valid(const CanRouterService *svc)
         if (svc->routes[i].handler == NULL || !bus_is_valid(svc->routes[i].bus)) {
             return false;
         }
+    }
+    if (svc->heartbeat.enabled
+        && (!bus_is_valid(svc->heartbeat.bus) || svc->heartbeat.can_id > CAN_ROUTER_MAX_STD_ID
+            || svc->heartbeat.every_steps == 0U)) {
+        return false;
     }
     return true;
 }
@@ -95,7 +108,9 @@ IfStatus can_router_service_init(void *ctx)
         (void)memset(&bus->stats, 0, sizeof(bus->stats));
     }
 
-    router_ready = true;
+    heartbeat_countdown = 0U; /* the first step sends one */
+    heartbeat_sequence  = 0U;
+    router_ready        = true;
     return IF_OK;
 }
 
@@ -199,6 +214,26 @@ static void drain_tx(CanRouterBus bus)
     }
 }
 
+/* Queue the heartbeat when it is due. It goes through can_router_send()
+ * like any producer's frame, so it is counted, dropped and sent exactly as
+ * they are: if it shows up on the bus, the whole TX path works. A refused
+ * heartbeat still advances the sequence, so the gap shows on the bus. */
+static void heartbeat_step(const CanRouterHeartbeat *heartbeat)
+{
+    CanFrame frame;
+
+    if (!heartbeat->enabled) {
+        return;
+    }
+    if (heartbeat_countdown == 0U) {
+        can_heartbeat_encode(heartbeat->can_id, heartbeat_sequence, now_ms(), &frame);
+        (void)can_router_send(heartbeat->bus, &frame);
+        heartbeat_sequence++;
+        heartbeat_countdown = heartbeat->every_steps;
+    }
+    heartbeat_countdown--;
+}
+
 /* cppcheck-suppress constParameterPointer ; signature fixed by PeriodicTask.step */
 void vCANRouterServiceStep(void *ctx)
 {
@@ -212,6 +247,7 @@ void vCANRouterServiceStep(void *ctx)
     for (bus = 0U; bus < (unsigned int)CAN_ROUTER_BUS_COUNT; bus++) {
         drain_rx(svc, (CanRouterBus)bus);
     }
+    heartbeat_step(&svc->heartbeat);
     for (bus = 0U; bus < (unsigned int)CAN_ROUTER_BUS_COUNT; bus++) {
         drain_tx((CanRouterBus)bus);
     }
