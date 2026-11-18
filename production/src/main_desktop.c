@@ -76,12 +76,13 @@
  * ---------------------------------------------------------------------- */
 
 static const RtosSystemDrivers sim_drivers = {
-    .adc  = &adc_fake,
-    .can  = &can_fake,
-    .gpio = &gpio_fake,
-    .pwm  = &pwm_fake,
-    .uart = &usart_fake,
-    .wdg  = &wdg_fake,
+    .adc        = &adc_fake,
+    .main_can   = &main_can_fake,
+    .sensor_can = &sensor_can_fake,
+    .gpio       = &gpio_fake,
+    .pwm        = &pwm_fake,
+    .uart       = &usart_fake,
+    .wdg        = &wdg_fake,
 };
 
 /* -------------------------------------------------------------------------
@@ -145,7 +146,8 @@ static void sim_ctrl_task(void *param)
 static void sim_reset_drivers(void)
 {
     adc_fake_reset();
-    can_fake_reset();
+    can_fake_reset(&main_can_fake);
+    can_fake_reset(&sensor_can_fake);
     gpio_fake_reset();
     pwm_fake_reset();
     usart_fake_reset();
