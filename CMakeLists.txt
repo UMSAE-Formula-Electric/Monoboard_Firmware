@@ -223,6 +223,7 @@ add_library(services STATIC
         ${PROD}/services/cli_core.c
         ${PROD}/services/cli_commands.c
         ${PROD}/services/cli_service.c
+        ${PROD}/services/can_router_service.c
         # Output-forcing CLI commands exist in Debug builds only (issue #51).
         $<IF:$<CONFIG:Debug>,${PROD}/services/cli_commands_debug.c,${PROD}/services/cli_commands_debug_none.c>
 )

@@ -215,10 +215,22 @@ static IfStatus bus_init(CanStm32Bus *bus, const CanConfig *config)
         return IF_HW_FAULT;
     }
 
-    pclk1_hz  = HAL_RCC_GetPCLK1Freq();
+    /* The bit is a fixed 16 time quanta, so the prescaler must divide the
+     * APB1 clock into exactly bitrate * 16. Reject a rate that does not
+     * divide evenly: rounding the prescaler would run the bus at a
+     * different rate (800k from 16 MHz rounds to 1 Mbit/s) and every frame
+     * would be an error frame. Checking against pclk1 / 16 first also
+     * keeps bitrate * 16 from overflowing. */
+    pclk1_hz = HAL_RCC_GetPCLK1Freq();
+    if (config->bitrate_bps > pclk1_hz / CAN_STM32_TIME_QUANTA) {
+        return IF_HW_FAULT; /* faster than this clock can time */
+    }
+    if (pclk1_hz % (config->bitrate_bps * CAN_STM32_TIME_QUANTA) != 0U) {
+        return IF_HW_FAULT; /* not an exact divisor of this clock */
+    }
     prescaler = pclk1_hz / (config->bitrate_bps * CAN_STM32_TIME_QUANTA);
-    if (prescaler == 0U || prescaler > 1024U) {
-        return IF_HW_FAULT; /* bitrate not achievable from this clock */
+    if (prescaler > 1024U) {
+        return IF_HW_FAULT; /* slower than the 10-bit prescaler reaches */
     }
 
     hcan->Instance                  = bus->instance;

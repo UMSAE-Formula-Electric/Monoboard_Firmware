@@ -32,11 +32,6 @@ void vIMDServiceStep(void *ctx)
     (void)ctx;
 }
 
-void vCANRouterServiceStep(void *ctx)
-{
-    (void)ctx;
-}
-
 void vHealthrunServiceStep(void *ctx)
 {
     (void)ctx;
