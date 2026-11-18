@@ -54,7 +54,6 @@
 #define MC_PRIORITY         ((UBaseType_t)(tskIDLE_PRIORITY + 3U))
 #define BMS_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 2U))
 #define IMD_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 2U))
-#define LOGGING_PRIORITY    ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 #define HEALTHRUN_PRIORITY  ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 #define CLI_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 
@@ -63,7 +62,6 @@
 #define MC_PERIOD_MS         15U
 #define BMS_PERIOD_MS        100U
 #define IMD_PERIOD_MS        100U
-#define LOGGING_PERIOD_MS    10U
 #define HEALTHRUN_PERIOD_MS  1000U
 #define BOOT_PERIOD_MS       500U
 #define CLI_PERIOD_MS        20U
@@ -73,7 +71,6 @@
 #define MC_STACK_WORDS         256U
 #define BMS_STACK_WORDS        256U
 #define IMD_STACK_WORDS        256U
-#define LOGGING_STACK_WORDS    256U
 #define HEALTHRUN_STACK_WORDS  256U
 #define BOOT_STACK_WORDS       256U
 #define CLI_STACK_WORDS        512U /* handlers format text with vsnprintf */
@@ -104,9 +101,6 @@ static StackType_t  bms_stack[BMS_STACK_WORDS];
 
 static StaticTask_t imd_tcb;
 static StackType_t  imd_stack[IMD_STACK_WORDS];
-
-static StaticTask_t logging_tcb;
-static StackType_t  logging_stack[LOGGING_STACK_WORDS];
 
 static StaticTask_t healthrun_tcb;
 static StackType_t  healthrun_stack[HEALTHRUN_STACK_WORDS];
@@ -165,10 +159,6 @@ static const PeriodicTask bms_task = {
 static const PeriodicTask imd_task = {
     .step      = vIMDServiceStep,
     .period_ms = IMD_PERIOD_MS,
-};
-static const PeriodicTask logging_task = {
-    .step      = vLoggingServiceStep,
-    .period_ms = LOGGING_PERIOD_MS,
 };
 static const PeriodicTask healthrun_task = {
     .step      = vHealthrunServiceStep,
@@ -285,11 +275,6 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
         return false;
     }
 
-    if (xTaskCreateStatic(periodic_task, "logging", (configSTACK_DEPTH_TYPE)LOGGING_STACK_WORDS,
-                          (void *)&logging_task, LOGGING_PRIORITY, logging_stack, &logging_tcb)
-        == NULL) {
-        return false;
-    }
 
     if (xTaskCreateStatic(periodic_task, "healthrun", (configSTACK_DEPTH_TYPE)HEALTHRUN_STACK_WORDS,
                           (void *)&healthrun_task, HEALTHRUN_PRIORITY, healthrun_stack,
