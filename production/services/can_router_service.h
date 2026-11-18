@@ -20,6 +20,77 @@
  * CanRouterStats::rx_unmatched, not dropped silently: an unexpected ID on
  * the bus is diagnostic information.
  *
+ * Subscribing to an ID. A task never receives from a CanIf. It adds a
+ * CanRoute whose handler copies the frame onto a queue the task owns, and
+ * drains that queue in its own step. Four parts:
+ *
+ *  1. Name the ID in can_ids.h (never a literal in a service).
+ *  2. In the service: a queue handle in its context, a handler that copies
+ *     into it with a zero timeout, and a step that drains it.
+ *  3. In rtos_system.c: the queue's static storage, created at the top of
+ *     rtos_system_create() before any task; and a row in the router's
+ *     routing table, which is `static const` so it lives in flash (the
+ *     address of a static context is a link-time constant, so @c ctx can
+ *     point at it).
+ *  4. Point the service's PeriodicTask at its context.
+ *
+ * @code
+ * // can_ids.h
+ * #define CAN_ID_MAIN_BMS_STATUS 0x300U
+ *
+ * // bms_service.c -- the handler runs in the router task
+ * void bms_service_on_can(const CanFrame *frame, void *ctx)
+ * {
+ *     BmsService *svc = (BmsService *)ctx;
+ *
+ *     if (xQueueSend(svc->rx_queue, frame, 0) != pdTRUE) {
+ *         svc->rx_dropped++; // our queue is full: count, never stall the router
+ *     }
+ * }
+ *
+ * void vBMSServiceStep(void *ctx)
+ * {
+ *     BmsService *svc = (BmsService *)ctx;
+ *     CanFrame    frame;
+ *
+ *     while (xQueueReceive(svc->rx_queue, &frame, 0) == pdTRUE) {
+ *         // decode frame.data, update BMS state
+ *     }
+ * }
+ *
+ * // rtos_system.c
+ * static StaticQueue_t bms_rx_queue_struct;
+ * static uint8_t       bms_rx_queue_storage[BMS_RX_QUEUE_DEPTH * sizeof(CanFrame)];
+ * static BmsService    bms_svc;
+ *
+ * static const CanRoute can_routes[] = {
+ *     {.bus         = CAN_ROUTER_BUS_MAIN,
+ *      .extended_id = false,
+ *      .id          = CAN_ID_MAIN_BMS_STATUS,
+ *      .mask        = 0x7FFU, // exact ID
+ *      .handler     = bms_service_on_can,
+ *      .ctx         = &bms_svc},
+ * };
+ *
+ * // in rtos_system_create(), before any xTaskCreateStatic()
+ * bms_svc.rx_queue = xQueueCreateStatic(BMS_RX_QUEUE_DEPTH, sizeof(CanFrame),
+ *                                       bms_rx_queue_storage, &bms_rx_queue_struct);
+ * if (bms_svc.rx_queue == NULL) {
+ *     return false;
+ * }
+ * can_router_svc.routes      = can_routes;
+ * can_router_svc.route_count = sizeof(can_routes) / sizeof(can_routes[0]);
+ * @endcode
+ *
+ * Handler rules: it runs in the router task for every matching frame, so
+ * zero timeouts only (no portMAX_DELAY, no mutex, no printing), copy what
+ * it needs (@p frame is valid only during the call), and count rather than
+ * wait when its queue is full. Size the queue for the burst between two of
+ * the task's own steps: a 100 ms task receiving a 10 ms message needs at
+ * least 10 slots, plus margin. To test a subscription, inject the frame
+ * with can_fake_inject_rx(), run vCANRouterServiceStep(), then check the
+ * service's queue or run its step and check its state.
+ *
  * TX path. can_router_send() copies the frame onto that bus's TX queue and
  * returns at once; no service ever blocks on a mailbox. Each step moves
  * frames from the TX queue into the hardware mailboxes until the driver
@@ -85,8 +156,12 @@ typedef void (*CanRouteHandler)(const CanFrame *frame, void *ctx);
 /**
  * One entry of the routing table. A frame matches when it arrived on
  * @c bus, its ID kind equals @c extended_id, and
- * `(frame->id & mask) == (id & mask)`. A mask of 0 matches every ID of that
- * kind (e.g. for a logger).
+ * `(frame->id & mask) == (id & mask)`. For standard IDs: 0x7FF matches one
+ * exact ID; 0x7F0 with id 0x300 matches 0x300-0x30F (a device's block of
+ * IDs); 0 matches every ID of that kind (e.g. for a logger). When several
+ * routes match a frame, every one of their handlers is called, so two
+ * tasks can subscribe to the same ID. See "Subscribing to an ID" in the
+ * file comment for the full pattern.
  */
 typedef struct {
     CanRouterBus    bus;
