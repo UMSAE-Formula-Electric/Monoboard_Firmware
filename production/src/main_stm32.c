@@ -11,6 +11,8 @@
  * PendSV and SysTick handlers onto the vector table's names, board_stm32.c
  * owns the TIM6 HAL-tick vector, and fault_stm32.c the fault vectors.
  */
+#include <stdio.h>
+
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -56,7 +58,17 @@ int main(void)
      * through fatal_stm32 instead of spinning until the watchdog bites. */
     rtos_hooks_install(&fatal_stm32);
     fault_stm32_boot();
-    (void)fault_stm32_format_boot_report(boot_report, sizeof(boot_report), fw_info_get()->version);
+
+    /* DWT is part of the debug unit: say in the boot report whether the run-time
+     * stats time base counts with no debugger attached (issue #47). The report
+     * length can exceed the buffer, so clamp it before appending. */
+    size_t report_len = fault_stm32_format_boot_report(boot_report, sizeof(boot_report),
+                                                       fw_info_get()->version);
+    if (report_len < sizeof(boot_report)) {
+        (void)snprintf(&boot_report[report_len], sizeof(boot_report) - report_len,
+                       "dwt_cycle_counter=%s\n",
+                       time_stm32_cycle_counter_running() ? "running" : "STOPPED");
+    }
     cli_set_boot_report(boot_report);
 
     /* SEAM: watchdog init goes here once a service kicks it (#38): it must

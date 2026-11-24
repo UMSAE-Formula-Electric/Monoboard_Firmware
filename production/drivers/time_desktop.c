@@ -3,6 +3,7 @@
  * @brief Desktop monotonic time implementation using CLOCK_MONOTONIC.
  */
 #include "time_if.h"
+#include "timing_if.h"
 
 #include <time.h>
 
@@ -16,6 +17,27 @@ static uint32_t monotonic_time_us(void)
 
     return (uint32_t)(((uint64_t)timestamp.tv_sec * 1000000U)
                       + ((uint64_t)timestamp.tv_nsec / 1000U));
+}
+
+/* Desktop "cycles" are nanoseconds in 32 bits, so they wrap every 4.3 s. */
+uint32_t dwt_cycles(void)
+{
+    struct timespec timestamp;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &timestamp) != 0) {
+        return 0U;
+    }
+    return (uint32_t)(((uint64_t)timestamp.tv_sec * 1000000000U) + (uint64_t)timestamp.tv_nsec);
+}
+
+uint32_t dwt_cycles_per_us(void)
+{
+    return 1000U;
+}
+
+uint32_t dwt_cycles_to_us(uint32_t cycles)
+{
+    return cycles / 1000U;
 }
 
 uint32_t now_ms(void)

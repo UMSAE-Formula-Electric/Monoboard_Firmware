@@ -184,6 +184,7 @@ endif()
 add_library(interfaces INTERFACE
         production/interfaces/if_status.h
         production/interfaces/time_if.h
+        production/interfaces/timing_if.h
         production/interfaces/adc_if.h
         production/interfaces/build_info_types.h
         production/interfaces/can_if.h
@@ -272,6 +273,17 @@ target_link_libraries(rtos_hooks
         PUBLIC  interfaces freertos_kernel sanitizers
         PRIVATE warnings)
 target_link_libraries(freertos_kernel INTERFACE rtos_hooks)
+
+# -- Run-time stats time base + per-task CPU report. Same cycle as rtos_hooks:
+#    FreeRTOSConfig.h makes tasks.c call runtime_stats_counter() on every
+#    context switch, so the kernel links it back. dwt_cycles() comes from
+#    time_stm32.c / time_desktop.c, supplied by the executable's driver set.
+add_library(runtime_stats STATIC ${PROD}/services/runtime_stats.c)
+target_include_directories(runtime_stats PUBLIC ${PROD}/services)
+target_link_libraries(runtime_stats
+        PUBLIC  interfaces freertos_kernel sanitizers
+        PRIVATE warnings)
+target_link_libraries(freertos_kernel INTERFACE runtime_stats)
 
 # -- Drivers: fake sibling BUILDS everywhere (so it can't rot), but only
 #    LINKS into desktop/test binaries. can_fake.c and can_stm32.c define

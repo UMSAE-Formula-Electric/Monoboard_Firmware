@@ -15,6 +15,7 @@ target_link_libraries(unit_test PRIVATE
         fw_info
         services
         rtos_hooks                  # + freertos_kernel (POSIX port)
+        runtime_stats
         sanitizers
         warnings
 )
