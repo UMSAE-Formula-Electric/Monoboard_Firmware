@@ -61,6 +61,8 @@ uint64_t runtime_counter_update(RuntimeCounter *c, uint32_t raw);
  * the context-switch path; never blocks.
  * @return 64-bit tick count, 0 at the first call
  */
+/* FreeRTOSConfig.h declares it too, for tasks.c. Kept here for the docs and callers. */
+/* NOLINTNEXTLINE(readability-redundant-declaration) */
 uint64_t runtime_stats_counter(void);
 
 /**
