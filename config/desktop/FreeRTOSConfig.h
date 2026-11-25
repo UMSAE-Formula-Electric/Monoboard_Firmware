@@ -385,13 +385,21 @@
  * application writer needs to provide a clock source if set to 1.  Defaults to
  * 0 if left undefined.  See https://www.freertos.org/rtos-run-time-stats.html.
  */
-#define configGENERATE_RUN_TIME_STATS           0
+#define configGENERATE_RUN_TIME_STATS           1
+
+/* Same time base as the MCU (services/runtime_stats.c). The ALT macro is used
+ * because the POSIX port already defines portGET_RUN_TIME_COUNTER_VALUE() as
+ * process CPU time, which is far too coarse. */
+#define configRUN_TIME_COUNTER_TYPE             uint64_t
+#include <stdint.h>
+extern uint64_t runtime_stats_counter( void );
+#define portALT_GET_RUN_TIME_COUNTER_VALUE( x ) ( ( x ) = runtime_stats_counter() )
 
 /* Set configUSE_TRACE_FACILITY to include additional task structure members
  * are used by trace and visualisation functions and tools.  Set to 0 to exclude
  * the additional information from the structures. Defaults to 0 if left
  * undefined. */
-#define configUSE_TRACE_FACILITY                0
+#define configUSE_TRACE_FACILITY                1
 
 /* Set to 1 to include the vTaskList() and vTaskGetRunTimeStats() functions in
  * the build.  Set to 0 to exclude these functions from the build.  These two

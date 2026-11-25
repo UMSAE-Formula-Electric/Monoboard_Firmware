@@ -16,6 +16,7 @@ target_link_libraries(unit_test PRIVATE
         proto
         services
         rtos_hooks                  # + freertos_kernel (POSIX port)
+        runtime_stats
         sanitizers
         warnings
 )

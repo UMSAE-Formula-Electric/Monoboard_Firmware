@@ -49,9 +49,22 @@ extern uint32_t SystemCoreClock;
 #define configCHECK_FOR_STACK_OVERFLOW            2
 #define configUSE_MALLOC_FAILED_HOOK              1
 #define configUSE_DAEMON_TASK_STARTUP_HOOK        0
-#define configUSE_TRACE_FACILITY                  0
+
+/* Run-time stats, timed by the DWT cycle counter. runtime_stats_counter()
+ * (services/runtime_stats.c) widens it to 64 bits so its ~24 s wrap never
+ * reaches the kernel. time_stm32_init() starts the counter, so there is
+ * nothing to set up here. The trace facility is needed for
+ * uxTaskGetSystemState(). Stats formatting stays off: vTaskGetRunTimeStats()
+ * mallocs and there is no heap; use runtime_stats_format() instead. */
+#define configUSE_TRACE_FACILITY                  1
 #define configUSE_STATS_FORMATTING_FUNCTIONS      0
-#define configGENERATE_RUN_TIME_STATS             0
+#define configGENERATE_RUN_TIME_STATS             1
+#define configRUN_TIME_COUNTER_TYPE               uint64_t
+#ifndef __IASMARM__
+extern uint64_t runtime_stats_counter(void);
+#endif
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
+#define portALT_GET_RUN_TIME_COUNTER_VALUE(x)     ((x) = runtime_stats_counter())
 
 #define configUSE_TIMERS                          1
 #define configTIMER_TASK_PRIORITY                 (configMAX_PRIORITIES - 1)
