@@ -10,9 +10,7 @@
 void vPedalServiceStep(void *ctx);
 void vMotorcontrollerServiceStep(void *ctx);
 void vBMSServiceStep(void *ctx);
-void vLoggingServiceStep(void *ctx);
 void vIMDServiceStep(void *ctx);
-void vCANRouterServiceStep(void *ctx);
 void vHealthrunServiceStep(void *ctx);
 
 #endif /* SERVICE_STUBS_H */

@@ -22,17 +22,7 @@ void vBMSServiceStep(void *ctx)
     (void)ctx;
 }
 
-void vLoggingServiceStep(void *ctx)
-{
-    (void)ctx;
-}
-
 void vIMDServiceStep(void *ctx)
-{
-    (void)ctx;
-}
-
-void vCANRouterServiceStep(void *ctx)
 {
     (void)ctx;
 }

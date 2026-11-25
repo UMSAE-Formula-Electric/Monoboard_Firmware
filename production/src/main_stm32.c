@@ -37,12 +37,13 @@ static char boot_report[512] __attribute__((used));
 
 /* Driver selection: the one place the firmware names concrete drivers. */
 static const RtosSystemDrivers stm32_drivers = {
-    .adc  = &adc_stm32,
-    .can  = &can_stm32,
-    .gpio = &gpio_stm32,
-    .pwm  = &pwm_stm32,
-    .uart = &usart_stm32,
-    .wdg  = &wdg_stm32,
+    .adc        = &adc_stm32,
+    .main_can   = &main_can_stm32,
+    .sensor_can = &sensor_can_stm32,
+    .gpio       = &gpio_stm32,
+    .pwm        = &pwm_stm32,
+    .uart       = &usart_stm32,
+    .wdg        = &wdg_stm32,
 };
 
 int main(void)

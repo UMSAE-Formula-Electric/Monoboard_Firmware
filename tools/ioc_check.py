@@ -31,7 +31,8 @@ Checks:
   4. no .ioc GPIO pin is labelled without a matching GpioPin enumerator;
   5. GpioConfig .dir at first-party <x>.init(GPIO_PIN_..., &cfg) call sites
      agrees with the .ioc pin direction;
-  6. the pads can_stm32.c hard-codes for CAN still carry a CAN1_* signal.
+  6. the pads can_stm32.c hard-codes for each CAN bus still carry that
+     instance's CANn_* signal.
 
 Exit status is non-zero if any check fails. Stdlib only; no third-party deps.
 """
@@ -160,14 +161,22 @@ def parse_gpio_configs(sources: list[Path]) -> list[tuple[str, str, str, Path]]:
     return results
 
 
-def parse_can_gpio(driver: Path) -> tuple[str | None, list[int]]:
-    """(port, [pad numbers]) that can_stm32.c configures for the CAN peripheral."""
+def parse_can_gpio(driver: Path) -> list[tuple[str, str, list[int]]]:
+    """[(instance, port, [pad numbers])] for each bus can_stm32.c wires up.
+
+    Reads the per-bus wiring table: initialisers of the form
+    `{ .instance = CANn, .gpio_port = GPIOx, .gpio_pins = GPIO_PIN_a | ..., }`."""
     text = driver.read_text()
-    port_match = re.search(r"HAL_GPIO_Init\s*\(\s*(GPIO[A-H])", text)
-    pin_match = re.search(r"gpio_init\.Pin\s*=\s*([^;]+);", text)
-    port = port_match.group(1) if port_match else None
-    pads = [int(n) for n in _PIN_BIT_RE.findall(pin_match.group(1))] if pin_match else []
-    return port, pads
+    buses = []
+    for block in re.finditer(r"=\s*\{([^{}]*\.instance\s*=\s*CAN\d[^{}]*)\}", text):
+        body = block.group(1)
+        inst = re.search(r"\.instance\s*=\s*(CAN\d)\b", body)
+        port = re.search(r"\.gpio_port\s*=\s*(GPIO[A-H])\b", body)
+        pins = re.search(r"\.gpio_pins\s*=\s*([^,]+),", body)
+        if inst and port and pins:
+            buses.append((inst.group(1), port.group(1),
+                          [int(n) for n in _PIN_BIT_RE.findall(pins.group(1))]))
+    return buses
 
 
 # --------------------------------------------------------------------------- #
@@ -265,24 +274,25 @@ def check_gpio(enumerators, pins, pin_map, main_defines, label_to_pad) -> bool:
     return ok
 
 
-def check_can(pins, port, pads) -> bool:
+def check_can(pins, buses) -> bool:
     print("\ncan_stm32.c CAN pads -> .ioc")
-    if port is None or not pads:
-        _note("could not locate the CAN GPIO configuration in can_stm32.c, skipping")
+    if not buses:
+        _note("could not locate the CAN wiring table in can_stm32.c, skipping")
         return True
-    letter = port[-1]
     ok = True
-    for num in pads:
-        pad = f"P{letter}{num}"
-        signal = pins.get(pad, {}).get("Signal", "")
-        if signal.startswith("CAN1_"):
-            _ok(f"{pad} -> {signal}")
-        else:
-            _fail(
-                f"can_stm32.c configures {pad} for CAN, but the .ioc has "
-                f"{pad}.Signal={signal or '(unset)'} -- the CAN pinout has moved"
-            )
-            ok = False
+    for instance, port, pads in buses:
+        letter = port[-1]
+        for num in pads:
+            pad = f"P{letter}{num}"
+            signal = pins.get(pad, {}).get("Signal", "")
+            if signal.startswith(f"{instance}_"):
+                _ok(f"{instance}: {pad} -> {signal}")
+            else:
+                _fail(
+                    f"can_stm32.c configures {pad} for {instance}, but the .ioc has "
+                    f"{pad}.Signal={signal or '(unset)'} -- the CAN pinout has moved"
+                )
+                ok = False
     return ok
 
 
@@ -352,7 +362,7 @@ def main() -> int:
     enumerators = parse_gpio_enum(gpio_if)
     pin_map = parse_pin_map(gpio_drv)
     main_defines = parse_main_h_defines(main_h)
-    can_port, can_pads = parse_can_gpio(can_drv)
+    can_buses = parse_can_gpio(can_drv)
 
     # First-party C, minus the tests and the fakes -- real GpioConfig call sites.
     src_globs = ("production/drivers/*.c", "production/services/*.c",
@@ -371,7 +381,7 @@ def main() -> int:
 
     gpio_ok = check_gpio(enumerators, pins, pin_map, main_defines, labels)
     config_ok = check_gpio_config(configs, pins, labels)
-    can_ok = check_can(pins, can_port, can_pads)
+    can_ok = check_can(pins, can_buses)
 
     print()
     if gpio_ok and config_ok and can_ok:

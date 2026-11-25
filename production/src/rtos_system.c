@@ -30,6 +30,8 @@
 
 #include "FreeRTOS.h"
 #include "boot_service.h"
+#include "can_ids.h"
+#include "can_router_service.h"
 #include "cli_service.h"
 #include "service_stubs.h"
 #include "task.h"
@@ -53,7 +55,6 @@
 #define MC_PRIORITY         ((UBaseType_t)(tskIDLE_PRIORITY + 3U))
 #define BMS_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 2U))
 #define IMD_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 2U))
-#define LOGGING_PRIORITY    ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 #define HEALTHRUN_PRIORITY  ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 #define CLI_PRIORITY        ((UBaseType_t)(tskIDLE_PRIORITY + 1U))
 
@@ -62,7 +63,6 @@
 #define MC_PERIOD_MS         15U
 #define BMS_PERIOD_MS        100U
 #define IMD_PERIOD_MS        100U
-#define LOGGING_PERIOD_MS    10U
 #define HEALTHRUN_PERIOD_MS  1000U
 #define BOOT_PERIOD_MS       500U
 #define CLI_PERIOD_MS        20U
@@ -72,7 +72,6 @@
 #define MC_STACK_WORDS         256U
 #define BMS_STACK_WORDS        256U
 #define IMD_STACK_WORDS        256U
-#define LOGGING_STACK_WORDS    256U
 #define HEALTHRUN_STACK_WORDS  256U
 #define BOOT_STACK_WORDS       256U
 #define CLI_STACK_WORDS        512U /* handlers format text with vsnprintf */
@@ -80,6 +79,20 @@
 /* Debug CLI link (issue #51): 8 data bits, no parity, 1 stop bit.
  * PLACEHOLDER baud rate until the team confirms one. */
 #define CLI_UART_BAUD_BPS 115200U
+
+/* CAN bit rates (issue #37): 500 kbit/s on both buses. From the 16 MHz
+ * APB1 clock that is an exact prescaler of 2 (see can_stm32.c). */
+#define CAN_MAIN_BITRATE_BPS   500000U
+#define CAN_SENSOR_BITRATE_BPS 500000U
+
+/* Debug builds: the router sends a heartbeat (can_heartbeat.h) on the
+ * sensor bus at this period, to prove its TX path on a bench. CMake sets
+ * MONOBOARD_BUS_HEARTBEAT to 1 for Debug and 0 for every other build. */
+#define CAN_HEARTBEAT_PERIOD_MS 1000U
+
+#if (CAN_HEARTBEAT_PERIOD_MS % CAN_ROUTER_PERIOD_MS) != 0U
+#    error "CAN_HEARTBEAT_PERIOD_MS must be a whole multiple of CAN_ROUTER_PERIOD_MS"
+#endif
 
 /* -------------------------------------------------------------------------
  * Static storage
@@ -99,9 +112,6 @@ static StackType_t  bms_stack[BMS_STACK_WORDS];
 static StaticTask_t imd_tcb;
 static StackType_t  imd_stack[IMD_STACK_WORDS];
 
-static StaticTask_t logging_tcb;
-static StackType_t  logging_stack[LOGGING_STACK_WORDS];
-
 static StaticTask_t healthrun_tcb;
 static StackType_t  healthrun_stack[HEALTHRUN_STACK_WORDS];
 
@@ -113,8 +123,9 @@ static StackType_t  cli_stack[CLI_STACK_WORDS];
 
 /* Service contexts. rtos_system_create() fills in each one's drivers (and,
  * later, its queues) before creating the task that uses it. */
-static BootService boot_svc;
-static CliService  cli_svc;
+static BootService      boot_svc;
+static CanRouterService can_router_svc;
+static CliService       cli_svc;
 
 /* -------------------------------------------------------------------------
  * Wiring
@@ -123,12 +134,11 @@ static CliService  cli_svc;
 /* A service's init and step take its context as void * so they slot in here
  * directly, with no adapter per service.
  *
- * The UART is brought up by the debug CLI's init hook, the service that
- * owns it.
+ * Each bus is brought up by the init hook of the service that owns it: the
+ * UART by the debug CLI's, both CAN buses by the CAN router's.
  *
- * SEAM: CAN gets an init hook like the boot service's, in the service that
- * owns it, once its bitrate is confirmed; PWM once it has a channel plan. The ADC needs none (its
- * service calls start_scan). */
+ * SEAM: PWM gets an init hook once it has a channel plan. The ADC needs
+ * none (its service calls start_scan). */
 typedef struct {
     void *ctx;                   /* the service's context, handed to init and step */
     IfStatus (*init)(void *ctx); /* once, in the task, before the first step; may be NULL */
@@ -136,11 +146,14 @@ typedef struct {
     uint32_t period_ms;
 } PeriodicTask;
 
-/* Stub services take no context yet: ctx and init stay NULL. */
 static const PeriodicTask can_router_task = {
+    .ctx       = &can_router_svc,
+    .init      = can_router_service_init,
     .step      = vCANRouterServiceStep,
     .period_ms = CAN_ROUTER_PERIOD_MS,
 };
+
+/* Stub services take no context yet: ctx and init stay NULL. */
 static const PeriodicTask pedal_task = {
     .step      = vPedalServiceStep,
     .period_ms = PEDAL_PERIOD_MS,
@@ -156,10 +169,6 @@ static const PeriodicTask bms_task = {
 static const PeriodicTask imd_task = {
     .step      = vIMDServiceStep,
     .period_ms = IMD_PERIOD_MS,
-};
-static const PeriodicTask logging_task = {
-    .step      = vLoggingServiceStep,
-    .period_ms = LOGGING_PERIOD_MS,
 };
 static const PeriodicTask healthrun_task = {
     .step      = vHealthrunServiceStep,
@@ -227,6 +236,24 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
     cli_svc.ports.is_safe_state       = cli_is_safe_state;
     cli_svc.ports.gpio                = drivers->gpio;
 
+    /* No service subscribes to a CAN ID yet, so the routing table is empty
+     * and every received frame is counted as unmatched. SEAM: the MC, BMS
+     * and IMD services add their routes here as they land (#20, #21, #36). */
+    can_router_svc.buses[CAN_ROUTER_BUS_MAIN].can                  = drivers->main_can;
+    can_router_svc.buses[CAN_ROUTER_BUS_MAIN].config.bitrate_bps   = CAN_MAIN_BITRATE_BPS;
+    can_router_svc.buses[CAN_ROUTER_BUS_MAIN].config.loopback      = false;
+    can_router_svc.buses[CAN_ROUTER_BUS_SENSOR].can                = drivers->sensor_can;
+    can_router_svc.buses[CAN_ROUTER_BUS_SENSOR].config.bitrate_bps = CAN_SENSOR_BITRATE_BPS;
+    can_router_svc.buses[CAN_ROUTER_BUS_SENSOR].config.loopback    = false;
+    can_router_svc.routes                                          = NULL;
+    can_router_svc.route_count                                     = 0U;
+#if defined(MONOBOARD_BUS_HEARTBEAT) && (MONOBOARD_BUS_HEARTBEAT == 1)
+    can_router_svc.heartbeat.enabled     = true;
+    can_router_svc.heartbeat.bus         = CAN_ROUTER_BUS_SENSOR;
+    can_router_svc.heartbeat.can_id      = CAN_ID_SENS_HEARTBEAT;
+    can_router_svc.heartbeat.every_steps = CAN_HEARTBEAT_PERIOD_MS / CAN_ROUTER_PERIOD_MS;
+#endif
+
     if (xTaskCreateStatic(periodic_task, "boot", (configSTACK_DEPTH_TYPE)BOOT_STACK_WORDS,
                           (void *)&boot_task, BOOT_PRIORITY, boot_stack, &boot_tcb)
         == NULL) {
@@ -264,11 +291,6 @@ bool rtos_system_create(const RtosSystemDrivers *drivers)
         return false;
     }
 
-    if (xTaskCreateStatic(periodic_task, "logging", (configSTACK_DEPTH_TYPE)LOGGING_STACK_WORDS,
-                          (void *)&logging_task, LOGGING_PRIORITY, logging_stack, &logging_tcb)
-        == NULL) {
-        return false;
-    }
 
     if (xTaskCreateStatic(periodic_task, "healthrun", (configSTACK_DEPTH_TYPE)HEALTHRUN_STACK_WORDS,
                           (void *)&healthrun_task, HEALTHRUN_PRIORITY, healthrun_stack,

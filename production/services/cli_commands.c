@@ -15,6 +15,7 @@
 
 #include "FreeRTOS.h"
 #include "build_info_types.h"
+#include "can_router_service.h"
 #include "cli_core.h"
 #include "fw_info.h"
 #include "rtos_hooks.h"
@@ -142,6 +143,30 @@ static bool cmd_health(CliCore *core, int argc, char *argv[], CliOut *out)
     return true;
 }
 
+/* Names for `can`, indexed by CanRouterBus. */
+static const char *const can_bus_names[CAN_ROUTER_BUS_COUNT] = {"main", "sensor"};
+
+static bool cmd_can(CliCore *core, int argc, char *argv[], CliOut *out)
+{
+    unsigned int bus;
+
+    (void)core;
+    (void)argc;
+    (void)argv;
+    for (bus = 0U; bus < (unsigned int)CAN_ROUTER_BUS_COUNT; bus++) {
+        CanRouterStats stats;
+
+        (void)can_router_get_stats((CanRouterBus)bus, &stats);
+        cli_out_printf(out,
+                       "bus=%s rx_frames=%lu rx_unmatched=%lu tx_frames=%lu tx_dropped=%lu "
+                       "tx_errors=%lu" CLI_EOL,
+                       can_bus_names[bus], (unsigned long)stats.rx_frames,
+                       (unsigned long)stats.rx_unmatched, (unsigned long)stats.tx_frames,
+                       (unsigned long)stats.tx_dropped, (unsigned long)stats.tx_errors);
+    }
+    return true;
+}
+
 static bool cmd_needs_vehicle_state(CliCore *core, int argc, char *argv[], CliOut *out)
 {
     (void)argc;
@@ -181,6 +206,7 @@ const CliCommand cli_commands[] = {
     {"log", "last 16 command lines", cmd_log, 0U},
     {"boot", "reset cause and last crash", cmd_boot, 0U},
     {"health", "CLI and RTOS counters", cmd_health, 0U},
+    {"can", "CAN router counters per bus", cmd_can, 0U},
     {"state", "vehicle state (needs #25)", cmd_needs_vehicle_state, 0U},
     {"faults", "active faults (needs #59)", cmd_needs_fault_manager, 0U},
     {"faults clear", "clear faults (needs #59)", cmd_needs_fault_manager, CLI_FLAG_WRITE},

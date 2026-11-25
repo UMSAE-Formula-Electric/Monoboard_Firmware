@@ -1,7 +1,7 @@
 /**
  * @file test_can_fake.c
  * @brief Exercises the CanIf contract (production/interfaces/can_if.h) through
- * can_fake, the dependency-free double for can_stm32 (ARCHITECTURE.md:
+ * main_can_fake / sensor_can_fake, the dependency-free doubles for can_stm32 (ARCHITECTURE.md:
  * every driver has a programmable fake sibling so both stay warm).
  */
 #include <stdbool.h>
@@ -44,8 +44,8 @@ TEST(can_fake, send_before_init_fails)
 {
     CanFrame frame = make_frame(0x100, 8);
 
-    can_fake_reset();
-    CHECK(can_fake.send(&frame) == IF_HW_FAULT);
+    can_fake_reset(&main_can_fake);
+    CHECK(main_can_fake.send(&frame) == IF_HW_FAULT);
 }
 
 TEST(can_fake, init_then_send_is_captured)
@@ -54,16 +54,16 @@ TEST(can_fake, init_then_send_is_captured)
     CanFrame  sent;
     CanFrame  captured;
 
-    can_fake_reset();
-    CHECK(can_fake.init(&config) == IF_OK);
+    can_fake_reset(&main_can_fake);
+    CHECK(main_can_fake.init(&config) == IF_OK);
 
     sent = make_frame(0x123, 4);
-    CHECK(can_fake.send(&sent) == IF_OK);
-    CHECK(can_fake_tx_count() == 1U);
+    CHECK(main_can_fake.send(&sent) == IF_OK);
+    CHECK(can_fake_tx_count(&main_can_fake) == 1U);
 
-    CHECK(can_fake_pop_tx(&captured) == true);
+    CHECK(can_fake_pop_tx(&main_can_fake, &captured) == true);
     CHECK(frames_equal(&captured, &sent));
-    CHECK(can_fake_tx_count() == 0U);
+    CHECK(can_fake_tx_count(&main_can_fake) == 0U);
 }
 
 TEST(can_fake, send_fails_when_tx_queue_full)
@@ -72,13 +72,13 @@ TEST(can_fake, send_fails_when_tx_queue_full)
     CanFrame  frame  = make_frame(0x200, 1);
     size_t    i;
 
-    can_fake_reset();
-    CHECK(can_fake.init(&config) == IF_OK);
+    can_fake_reset(&main_can_fake);
+    CHECK(main_can_fake.init(&config) == IF_OK);
 
     for (i = 0; i < CAN_FAKE_QUEUE_DEPTH; i++) {
-        CHECK(can_fake.send(&frame) == IF_OK);
+        CHECK(main_can_fake.send(&frame) == IF_OK);
     }
-    CHECK(can_fake.send(&frame) == IF_BUSY);
+    CHECK(main_can_fake.send(&frame) == IF_BUSY);
 }
 
 TEST(can_fake, receive_without_data_times_out)
@@ -86,9 +86,9 @@ TEST(can_fake, receive_without_data_times_out)
     CanConfig config = {.bitrate_bps = 500000, .loopback = false};
     CanFrame  frame;
 
-    can_fake_reset();
-    CHECK(can_fake.init(&config) == IF_OK);
-    CHECK(can_fake.receive(&frame, 0) == IF_TIMEOUT);
+    can_fake_reset(&main_can_fake);
+    CHECK(main_can_fake.init(&config) == IF_OK);
+    CHECK(main_can_fake.receive(&frame, 0) == IF_TIMEOUT);
 }
 
 TEST(can_fake, injected_rx_is_received)
@@ -97,16 +97,16 @@ TEST(can_fake, injected_rx_is_received)
     CanFrame  injected;
     CanFrame  received;
 
-    can_fake_reset();
-    CHECK(can_fake.init(&config) == IF_OK);
+    can_fake_reset(&main_can_fake);
+    CHECK(main_can_fake.init(&config) == IF_OK);
 
     injected             = make_frame(0x321, 8);
     injected.extended_id = true;
-    can_fake_inject_rx(&injected);
+    can_fake_inject_rx(&main_can_fake, &injected);
 
-    CHECK(can_fake.receive(&received, 0) == IF_OK);
+    CHECK(main_can_fake.receive(&received, 0) == IF_OK);
     CHECK(frames_equal(&received, &injected));
-    CHECK(can_fake.receive(&received, 0) == IF_TIMEOUT);
+    CHECK(main_can_fake.receive(&received, 0) == IF_TIMEOUT);
 }
 
 TEST(can_fake, reset_clears_rx_tx_and_init_state)
@@ -114,14 +114,61 @@ TEST(can_fake, reset_clears_rx_tx_and_init_state)
     CanConfig config = {.bitrate_bps = 500000, .loopback = false};
     CanFrame  frame  = make_frame(0x1, 1);
 
-    can_fake_reset();
-    CHECK(can_fake.init(&config) == IF_OK);
-    can_fake_inject_rx(&frame);
-    CHECK(can_fake.send(&frame) == IF_OK);
+    can_fake_reset(&main_can_fake);
+    CHECK(main_can_fake.init(&config) == IF_OK);
+    can_fake_inject_rx(&main_can_fake, &frame);
+    CHECK(main_can_fake.send(&frame) == IF_OK);
 
-    can_fake_reset();
+    can_fake_reset(&main_can_fake);
 
-    CHECK(can_fake_tx_count() == 0U);
-    CHECK(can_fake.receive(&frame, 0) == IF_TIMEOUT);
-    CHECK(can_fake.send(&frame) == IF_HW_FAULT); /* reset also un-initializes */
+    CHECK(can_fake_tx_count(&main_can_fake) == 0U);
+    CHECK(main_can_fake.receive(&frame, 0) == IF_TIMEOUT);
+    CHECK(main_can_fake.send(&frame) == IF_HW_FAULT); /* reset also un-initializes */
+}
+
+TEST(can_fake, buses_are_independent)
+{
+    CanConfig config       = {.bitrate_bps = 500000, .loopback = false};
+    CanFrame  main_frame   = make_frame(0x100, 2);
+    CanFrame  sensor_frame = make_frame(0x200, 3);
+    CanFrame  received;
+
+    can_fake_reset(&main_can_fake);
+    can_fake_reset(&sensor_can_fake);
+
+    /* Initialising one bus does not initialise the other. */
+    CHECK(main_can_fake.init(&config) == IF_OK);
+    CHECK(sensor_can_fake.send(&sensor_frame) == IF_HW_FAULT);
+    CHECK(sensor_can_fake.init(&config) == IF_OK);
+
+    /* TX is captured per bus. */
+    CHECK(main_can_fake.send(&main_frame) == IF_OK);
+    CHECK(can_fake_tx_count(&main_can_fake) == 1U);
+    CHECK(can_fake_tx_count(&sensor_can_fake) == 0U);
+    CHECK(sensor_can_fake.send(&sensor_frame) == IF_OK);
+    CHECK(can_fake_pop_tx(&sensor_can_fake, &received) == true);
+    CHECK(frames_equal(&received, &sensor_frame));
+    CHECK(can_fake_pop_tx(&main_can_fake, &received) == true);
+    CHECK(frames_equal(&received, &main_frame));
+
+    /* RX is delivered only on the bus it was injected into. */
+    can_fake_inject_rx(&sensor_can_fake, &sensor_frame);
+    CHECK(main_can_fake.receive(&received, 0) == IF_TIMEOUT);
+    CHECK(sensor_can_fake.receive(&received, 0) == IF_OK);
+    CHECK(frames_equal(&received, &sensor_frame));
+
+    /* Resetting one bus leaves the other initialised. */
+    can_fake_reset(&sensor_can_fake);
+    CHECK(sensor_can_fake.send(&sensor_frame) == IF_HW_FAULT);
+    CHECK(main_can_fake.send(&main_frame) == IF_OK);
+}
+
+TEST(can_fake, control_surface_ignores_unknown_bus)
+{
+    CanFrame frame = make_frame(0x1, 1);
+
+    can_fake_inject_rx(NULL, &frame);
+    can_fake_reset(NULL);
+    CHECK(can_fake_tx_count(NULL) == 0U);
+    CHECK(can_fake_pop_tx(NULL, &frame) == false);
 }

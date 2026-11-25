@@ -37,7 +37,7 @@ typedef struct {
 
 /**
  * CAN bus driver contract: the function-pointer table a concrete driver
- * (@c can_stm32, @c can_fake) exports and a composition root injects into
+ * (@c main_can_stm32, @c main_can_fake, ...) exports and a composition root injects into
  * the services that need the bus. Every driver, real or fake, honours the
  * semantics below.
  */
